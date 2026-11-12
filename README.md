@@ -5,6 +5,10 @@ It accompanies a demo paper under review at ACM IUI 2027; the citation will foll
 
 **Open the explorer:** https://pipaflores.github.io/latent-topographies-of-play/
 
+![The VAE map of the Hunts, three ways: coloured by HDBSCAN cluster, by Ghost kills (Aggression3) per hunt, and by the local mean of Ghost kills in density mode.](screenshots/vae_hunts_ghost_kills.png)
+
+*The VAE map of the Hunts (Pac-Man + ghost positions), coloured by HDBSCAN cluster, by Ghost kills (Aggression3; grey: no ghost killed), and by Ghost kills in density mode.*
+
 The explorer holds 70 views: two sequence types, each in five input representations, each embedded by one of seven methods.
 Four are autoencoders and three are baselines: the raw input, a generic summary and an engineered summary.
 Every view projects its embedding to 2-D and 3-D maps.
