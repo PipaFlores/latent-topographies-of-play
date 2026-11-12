@@ -1,0 +1,1126 @@
+<!doctype html>
+<!-- Template for template/build_explorer.py: the builder inlines the manifest and the plotly.js URL. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Embedding Explorer</title>
+<script src="__PLOTLY_SRC__"></script>
+<style>
+:root {
+  --bg: #fafaf9; --panel: #ffffff; --text: #1c1917; --muted: #78716c; --border: #e7e5e4;
+  --accent: #2563eb; --accent-soft: #dbeafe; --missing: #c8c5c2; --hl: #dc2626;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161514; --panel: #1f1e1c; --text: #ecebe9; --muted: #a29d98; --border: #34322f;
+    --accent: #60a5fa; --accent-soft: #1e3a5f; --missing: #4a4744; --hl: #f87171;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+#app { display: grid; grid-template-columns: 270px 1fr var(--rw, 360px); height: 100vh; }
+aside { background: var(--panel); border-color: var(--border); border-style: solid; overflow-y: auto; }
+#left { border-width: 0 1px 0 0; padding: 12px 14px; }
+#right { border-width: 0 0 0 1px; display: flex; flex-direction: column; position: relative; }
+/* Drag the right panel's left edge to widen it (double-click restores the default). */
+#rgrip { position: absolute; left: 0; top: 0; bottom: 0; width: 6px; cursor: col-resize; z-index: 5; }
+#rgrip:hover, body.resizing #rgrip { background: var(--accent-soft); }
+body.resizing { cursor: col-resize; user-select: none; }
+body.resizing #plot { pointer-events: none; }
+.pinmedia img { width: 100%; max-width: calc(100vh - 200px); height: auto; }
+h1 { font-size: 15px; margin: 0 0 2px; }
+.sub { color: var(--muted); font-size: 11.5px; margin-bottom: 10px; }
+label.f { display: block; margin: 9px 0 3px; color: var(--muted); font-size: 11.5px;
+  text-transform: uppercase; letter-spacing: .03em; }
+select, input[type=text] { width: 100%; padding: 5px 6px; border: 1px solid var(--border);
+  border-radius: 5px; background: var(--bg); color: var(--text); font: inherit; }
+.seg { display: flex; border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
+.seg button { flex: 1; border: 0; padding: 5px 0; background: var(--bg); color: var(--text);
+  font: inherit; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--border); }
+.seg button.on { background: var(--accent); color: #fff; }
+.seg button:disabled { opacity: .4; cursor: default; }
+.row { display: flex; gap: 8px; align-items: center; }
+.row > * { flex: 1; }
+hr { border: 0; border-top: 1px solid var(--border); margin: 12px 0; }
+#facets .facet { margin-bottom: 2px; }
+#main { position: relative; min-width: 0; display: flex; flex-direction: column; }
+#titlebar { padding: 8px 14px; border-bottom: 1px solid var(--border); background: var(--panel);
+  display: flex; gap: 14px; align-items: baseline; flex-wrap: wrap; }
+#titlebar b { font-size: 14px; }
+#titlebar span { color: var(--muted); font-size: 12px; }
+#plot { flex: 1; min-height: 0; }
+#legend { position: absolute; left: 10px; bottom: 10px; max-height: 45%; max-width: 230px;
+  overflow-y: auto; background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
+  padding: 6px 8px; font-size: 11.5px; opacity: .95; }
+#legend .it { display: flex; gap: 6px; align-items: center; cursor: pointer; padding: 1px 2px;
+  border-radius: 3px; }
+#legend .it:hover { background: var(--accent-soft); }
+#legend .it.off { opacity: .35; }
+#legend .sw { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+#legend .n { margin-left: auto; color: var(--muted); }
+#loading { position: absolute; inset: 0; display: none; place-items: center; color: var(--muted);
+  background: color-mix(in srgb, var(--bg) 60%, transparent); font-size: 14px; }
+#card { position: fixed; z-index: 10; pointer-events: none; display: none; background: var(--panel);
+  border: 1px solid var(--border); border-radius: 7px; padding: 6px; box-shadow: 0 6px 20px #0003;
+  font-size: 11.5px; }
+#card img, .gifbox { display: block; border-radius: 4px; background: #000; }
+.gifbox.none { display: grid; place-items: center; color: #aaa; background: repeating-linear-gradient(
+  45deg, #2a2a2a, #2a2a2a 8px, #333 8px, #333 16px); aspect-ratio: 1; font-size: 12px; }
+#card .k { font-family: ui-monospace, monospace; margin-top: 4px; }
+#card .v { color: var(--muted); }
+.tabs { display: flex; border-bottom: 1px solid var(--border); }
+.tabs button { flex: 1; border: 0; background: none; color: var(--muted); padding: 9px 0;
+  font: inherit; cursor: pointer; border-bottom: 2px solid transparent; }
+.tabs button.on { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+.pane { display: none; padding: 10px 12px; overflow-y: auto; scrollbar-gutter: stable; flex: 1; }
+.pane.on { display: block; }
+table { width: 100%; border-collapse: collapse; font-size: 12px; }
+th { text-align: left; color: var(--muted); font-weight: 500; position: sticky; top: -10px;
+  background: var(--panel); padding: 4px 3px; border-bottom: 1px solid var(--border); }
+td { padding: 3px 3px; border-bottom: 1px solid var(--border); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+th.sort { cursor: pointer; user-select: none; }
+th.sort:hover, th.sorted { color: var(--text); }
+tr.click { cursor: pointer; }
+tr.click:hover td { background: var(--accent-soft); }
+tr.cur td { background: var(--accent-soft); font-weight: 600; }
+.bar { height: 6px; background: var(--accent); border-radius: 3px; min-width: 1px; }
+.note { color: var(--muted); font-size: 11.5px; margin: 6px 0; }
+/* Three tiles a row, so widening the right panel enlarges them rather than adding columns, but
+   none under 100 px (two a row in a narrow panel); a board fills its tile with its pieces scaled
+   to it (9.75cqw = the hover card's width / 8 * 0.78) */
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(max(100px, calc((100% - 12px) / 3)), 1fr)); gap: 6px; }
+.gallery figure { margin: 0; cursor: pointer; min-width: 0; container-type: inline-size; }
+.gallery img, .gallery .gifbox, .gallery .board { width: 100% !important; }
+.gallery .board .sq { font-size: 9.75cqw !important; }
+.gallery figcaption { font: 10px ui-monospace, monospace; color: var(--muted); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; font-size: 12px; margin: 8px 0; }
+dt { color: var(--muted); }
+dd { margin: 0; font-variant-numeric: tabular-nums; }
+.chip { display: inline-block; padding: 1px 6px; border-radius: 9px; background: var(--accent-soft);
+  margin: 0 3px 3px 0; font-size: 11px; }
+button.small { border: 1px solid var(--border); background: var(--bg); color: var(--text);
+  border-radius: 5px; padding: 3px 8px; font: inherit; cursor: pointer; }
+.board { display: grid; grid-template-columns: repeat(8, 1fr); aspect-ratio: 1; border-radius: 4px; overflow: hidden; }
+.board .sq { display: grid; place-items: center; line-height: 1; user-select: none; }
+.board .l { background: #ecd9b9; } .board .d { background: #ae8a68; }
+.board .l.hl { background: #f3e67a; } .board .d.hl { background: #c9b543; }
+.board .w { color: #fff; text-shadow: 0 0 1px #000, 0 0 1px #000, 0 0 2px #000; }
+.board .b { color: #111; }
+.plies { font: 11px/1.5 ui-monospace, monospace; color: var(--muted); margin-top: 4px; }
+.plies .cur { color: var(--text); font-weight: 700; }
+.plies .foc { color: var(--text); }
+#privacy { color: var(--hl); }
+@media (max-width: 1400px) { #app { grid-template-columns: 230px 1fr var(--rw, 300px); } }
+#legend.min .it, #legend.min .more { display: none; }
+#legend .head { cursor: pointer; margin: 0 0 3px; }
+@media (max-width: 760px) {
+  #app { grid-template-columns: 1fr; height: auto; }
+  #plot { height: 70vh; flex: none; }
+  #left, #right { border-width: 1px 0 0 0; }
+  #rgrip { display: none; }
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="left">
+    <h1 id="apptitle">Embedding explorer</h1>
+    <div class="sub" id="built"></div>
+
+    <label class="f" for="seq" id="seqlabel">Data set</label>
+    <select id="seq"></select>
+    <div id="facets"></div>
+    <label class="f" for="view">View <span id="nviews"></span></label>
+    <select id="view"></select>
+
+    <hr>
+    <label class="f" for="color">Colour by</label>
+    <select id="color"></select>
+    <div class="seg" id="lsub" style="margin-top:6px;display:none"><button data-ls="0" class="on">All labels</button><button data-ls="1"></button></div>
+    <div class="note" id="colornote"></div>
+    <div class="seg" id="cmap" style="margin-top:6px"><button data-c="viridis" class="on">Viridis</button><button data-c="plasma">Plasma</button></div>
+
+    <label class="f" id="nameslabel">Label names</label>
+    <div class="seg" id="names"><button data-n="0" class="on">Code</button><button data-n="1">Description</button></div>
+
+    <label class="f">Map</label>
+    <div class="seg" id="red"><button data-r="umap" class="on">Map</button><button data-r="pca">PCA</button></div>
+    <div class="seg" id="dim" style="margin-top:6px"><button data-d="2" class="on">2-D</button><button data-d="3">3-D</button></div>
+    <div class="note" id="mapnote"></div>
+    <div class="seg" id="show" style="margin-top:6px"><button data-k="points" class="on">Points</button><button data-k="density">Density</button></div>
+    <div id="densctl" style="display:none">
+      <div class="seg" id="dref" style="margin-top:6px"><button data-ref="abs" class="on">Absolute</button><button data-ref="rel">vs all</button></div>
+      <label class="f" for="bw">Bandwidth <span class="note" id="bwnote"></span></label><input type="range" id="bw" min="0.1" max="1.5" step="0.05" value="0.5" style="width:100%">
+    </div>
+
+    <label class="f" for="find">Highlight keys containing</label>
+    <input type="text" id="find" placeholder="part of a key">
+
+    <hr>
+    <label class="f" for="psize">Point size</label><input type="range" id="psize" min="1" max="10" value="4" style="width:100%">
+    <label class="f" id="gsizelabel">GIF size on hover</label>
+    <div class="seg" id="gsize"><button data-s="160">S</button><button data-s="240" class="on">M</button><button data-s="360">L</button></div>
+    <div class="note" id="hint">Hover a point for its GIF. Click it to pin it. Lasso or box-select (2-D) to fill the gallery.
+      Click a legend entry to isolate that group. Middle-drag pans either map, scroll zooms.
+      3-D: drag to orbit (right-drag also pans). Density (2-D): isolate a class for its own density.</div>
+  </aside>
+
+  <section id="main">
+    <div id="titlebar"><b id="vtitle"></b><span id="vsub"></span></div>
+    <div id="plot"></div>
+    <div id="legend"></div>
+    <div id="loading">Loading…</div>
+  </section>
+
+  <aside id="right">
+    <div id="rgrip" title="Drag to resize · double-click to reset"></div>
+    <div class="tabs" id="tabs">
+      <button data-t="measures" class="on">Measures</button>
+      <button data-t="ranking">Ranking</button>
+      <button data-t="selection">Selection</button>
+      <button data-t="pinned">Pinned</button>
+    </div>
+    <div class="pane on" id="p-measures"></div>
+    <div class="pane" id="p-ranking">
+      <div class="row">
+        <div><label class="f" for="rk-set">Validation set</label><select id="rk-set"></select></div>
+        <div><label class="f" for="rk-measure">Measure</label><select id="rk-measure"></select></div>
+      </div>
+      <div class="note" id="rknote">Every view of this data set, best first. Click one to show it.</div>
+      <div id="rk-table"></div>
+    </div>
+    <div class="pane" id="p-selection"><div class="note">Lasso or box-select points on the 2-D map.</div></div>
+    <div class="pane" id="p-pinned"><div class="note">Click a point to pin it here.</div></div>
+  </aside>
+</div>
+<div id="card"></div>
+
+<script>
+const M = /*__MANIFEST__*/null;
+
+// ---------------------------------------------------------------- data loading
+const store = {};
+const waiting = {};
+function EXPLORER_LOAD(id, data) { store[id] = data; (waiting[id] || []).forEach(w => w.resolve(data)); delete waiting[id]; }
+function load(kind, id) {
+  const key = kind === 'boards' ? `boards_${id}` : id;  // a table's boards share its id
+  if (store[key]) return Promise.resolve(store[key]);
+  return new Promise((resolve, reject) => {
+    const first = !waiting[key];
+    (waiting[key] = waiting[key] || []).push({ resolve, reject });
+    if (!first) return;
+    const s = document.createElement('script');
+    s.src = `data/${encodeURIComponent(`${kind}_${id}`)}.js`;
+    // A failed file is forgotten (so a later visit tries again), and every caller waiting on it hears.
+    s.onerror = () => {
+      const error = new Error(`could not load data/${kind}_${id}.js`), ws = waiting[key] || [];
+      delete waiting[key]; s.remove();
+      ws.forEach(w => w.reject(error));
+    };
+    document.head.appendChild(s);
+  });
+}
+// Text from the data (keys, metadata, label and view names, summaries, measure values) as HTML
+// text. The domain file's notes, subtitle, privacy line, facet titles, measure columns and
+// full-space names are the page author's and go in as HTML.
+const ESC = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ESC[c]);
+
+// ---------------------------------------------------------------- constants
+const MEASURES = [
+  ['neigh_hit_adj', 'Neighbourhood hit (adj.)'], ['knn_r2_adj', 'kNN R² (adj.)'],
+  ['full_neigh_hit_adj', 'Neighbourhood hit (adj., full dim.)'], ['full_knn_r2_adj', 'kNN R² (adj., full dim.)'],
+  ['AMI', 'AMI (clusters)'], ['ARI', 'ARI (clusters)'], ['NMI', 'NMI (clusters)'],
+  ['neigh_hit', 'Neighbourhood hit (raw)'], ['knn_r2', 'kNN R² (raw)'],
+];
+const PALETTE = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b07aa1','#ff9da7',
+  '#9c755f','#bab0ac','#1f77b4','#ff7f0e','#2ca02c','#d62728','#9467bd','#8c564b','#e377c2',
+  '#17becf','#bcbd22','#aec7e8','#ffbb78','#98df8a','#ff9896','#c5b0d5','#c49c94','#f7b6d2',
+  '#9edae5','#dbdb8d'];
+// The page's wording, facets, focus labels, measures and hover media: the domain file's
+// (build_explorer.py --domain, README.md) over these defaults.
+const DOM = Object.assign({
+  title: 'Embedding explorer', subtitle: '', unit_noun: 'Data set', label_noun: 'Label',
+  // participant: a meta column naming who produced each point (null: none), shown as
+  // `<participant_label> <id>` on the hover card and counted in the gallery
+  participant: null, participant_label: null, participants_noun: 'participants', default_type: null,
+  find_placeholder: 'part of a key', media: 'none',
+  // the method names the page shows: the stored map's (its toggle button) and the clusters'
+  map_name: 'Map', clusterer: '',
+  // facets: [[key, title]] the view filters, in order; null: every facet key the views carry
+  facets: null, focus: [], first: null,
+  label_names: null, measures: MEASURES, other_group: 'Other labels',
+  // What a view's full_space.space names in the measures note ("default": any other space)
+  full_space_names: { latent: 'the latent', default: 'the input' },
+  // [key, header, tooltip]; a full_ column shows only when the view has its values.
+  measure_columns: [['neigh_hit_adj', 'NH map', 'Neighbourhood hit (adj.) on the 2-D map'],
+    ['full_neigh_hit_adj', 'NH full', 'Neighbourhood hit (adj.) in full dimension'],
+    ['knn_r2_adj', 'kNN map', 'kNN R² (adj.) on the 2-D map'], ['full_knn_r2_adj', 'kNN full', 'kNN R² (adj.) in full dimension'],
+    ['AMI', 'AMI', 'Clusters vs bins']],
+  notes: {}, privacy: '', hidden_colours: [],  // metadata kept off the colour menu (still in the pin card)
+  // {name, note, sets: {<type>: [cols]}}: a named subset of the labels the left panel can narrow
+  // the colour menu, the ranking sets and the measures rows to (hash ls=1); null hides the toggle
+  label_subset: null,
+  // {<facet>: {<value>: <display name>}}: readable names for facet values, shown in the filters and
+  // in each view's label (a part of the label between " · " that is one of the view's facet
+  // values is swapped for its display name)
+  value_names: {},
+}, M?.domain || {});
+if (!DOM.facets) {
+  const keys = [...new Set((M?.views || []).flatMap(v => Object.keys(v.facets || {})))];
+  DOM.facets = keys.filter(Boolean).map(k => [k, esc(k[0].toUpperCase() + k.slice(1).replace(/_/g, ' '))]);
+}
+const valueName = (key, v) => DOM.value_names?.[key]?.[v] ?? v;
+const viewLabel = v => {
+  const keys = Object.keys(v.facets || {}), parts = v.label.split(' · ');
+  // A label that is the facet values joined (views.write_view's default) maps part i to facet i;
+  // any other label maps a part to the first facet with that value and a display name.
+  const joined = parts.length === keys.length && parts.every((part, i) => v.facets[keys[i]] === part);
+  return parts.map((part, i) => {
+    const key = joined ? keys[i] : keys.find(k => v.facets[k] === part && valueName(k, part) !== part);
+    return key ? valueName(key, part) : part;
+  }).join(' · ');
+};
+// A view's experiment, shown beside its label only where the page filters by experiment.
+const SHOW_EXPERIMENT = DOM.facets.some(([k]) => k === 'experiment');
+// (not when the label already holds it, as a label of joined facet values does)
+const experimentOf = v => !SHOW_EXPERIMENT || !v.facets.experiment || v.label.split(' · ').includes(v.facets.experiment)
+  ? '' : valueName('experiment', v.facets.experiment);
+const NOTES = Object.assign({
+  measures: "NH: share of each point's 5 nearest neighbours in the same label bin, minus chance. kNN: label value predicted from those neighbours (R²), minus chance. Map: on the 2-D map (Euclidean); full: in the space the map was made from (cosine). AMI: clusters vs label bins (ARI, NMI and the raw scores are in Ranking).",
+  undefined: 'no value for this label',
+  no_label: 'no label for this point',
+  focus: '★ = focus label.',
+  point_labels: `${DOM.label_noun}s defined for this point`,
+}, DOM.notes || {});
+const focusOf = seq => Array.isArray(DOM.focus) ? DOM.focus : (DOM.focus[seq] || []);
+const firstOf = seq => !DOM.first ? focusOf(seq) : Array.isArray(DOM.first) ? DOM.first : (DOM.first[seq] || focusOf(seq));
+// The label subset's columns for a type (null: no subset there, the toggle hides), and whether a
+// column passes the current filter; a listed name may leave out the _value suffix.
+const subsetOf = seq => DOM.label_subset?.sets?.[seq] || null;
+const inSubset = c => { const s = S.ls && subsetOf(S.seq); return !s || s.includes(c) || s.includes(c.replace(/_value$/, '')); };
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const $ = id => document.getElementById(id);
+// A label's display name: its code, or its description (DOM.label_names) when the toggle says so.
+const pretty = c => {
+  const code = c.replace(/_value$/, '');
+  const names = DOM.label_names;
+  return S.names && names?.[code] ? names[code] : code;
+};
+const fmt = v => v == null || Number.isNaN(v) ? '–' : typeof v === 'string' ? v : (Math.abs(v) >= 100 ? v.toFixed(0) : (+v).toFixed(3));
+
+// ---------------------------------------------------------------- state
+const S = { seq: null, view: null, color: 'cluster', red: 'umap', dim: 2, psize: 4, gsize: 240, names: false, camera: null,
+  show: 'points', dref: 'abs', bw: 0.5, cmap: 'viridis', msort: { key: null, desc: true }, ls: false,
+  facets: {}, find: '', isolate: null, rkSet: null, rkMeasure: DOM.measures[0][0], pinned: null, pinnedKey: null, pinPly: 0 };
+// The sequential scale for numbers and densities. Plotly has Viridis built in but not plasma,
+// so plasma is matplotlib's, sampled at 11 stops.
+const PLASMA = ['#0d0887', '#41049d', '#6a00a8', '#8f0da4', '#b12a90', '#cc4778', '#e16462', '#f2844b', '#fca636', '#fcce25', '#f0f921']
+  .map((c, i) => [i / 10, c]);
+const seqScale = () => S.cmap === 'plasma' ? PLASMA : 'Viridis';
+let V = null, T = null, VM = null;  // view data, table data, view manifest entry
+let pointColorInfo = null;
+
+function readHash() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  const view = M.views.find(v => v.id === h.get('view'));
+  if (view) { S.seq = view.sequence_type; S.view = view.id; }
+  if (h.get('color')) S.color = h.get('color');
+  if (h.get('d') === '3') S.dim = 3;
+  if (h.get('r') === 'pca') S.red = 'pca';
+  if (h.get('m')) S.rkMeasure = h.get('m');
+  if (h.get('n') === '1') S.names = true;
+  if (h.get('k') === 'density') S.show = 'density';
+  if (h.get('ref') === 'rel') S.dref = 'rel';
+  if (h.get('bw')) S.bw = Number(h.get('bw')) || S.bw;
+  if (h.get('s')) { const [key, d] = h.get('s').split('.'); S.msort = { key, desc: d !== 'asc' }; }
+  if (h.get('ls') === '1') S.ls = true;
+  if (h.get('cm') === 'plasma') S.cmap = 'plasma';
+}
+function writeHash() {
+  const h = new URLSearchParams({ view: S.view, color: S.color, r: S.red, d: S.dim, m: S.rkMeasure, n: S.names ? 1 : 0 });
+  if (S.show === 'density') { h.set('k', 'density'); h.set('ref', S.dref); h.set('bw', S.bw); }
+  if (S.msort.key) h.set('s', `${S.msort.key}.${S.msort.desc ? 'desc' : 'asc'}`);
+  if (S.ls && subsetOf(S.seq)) h.set('ls', 1);
+  if (S.cmap !== 'viridis') h.set('cm', S.cmap);
+  if (fixedRW) h.set('rw', fixedRW);
+  history.replaceState(null, '', '#' + h.toString());
+}
+
+// ---------------------------------------------------------------- left controls
+function seqViews() { return M.views.filter(v => v.sequence_type === S.seq); }
+function filteredViews() {
+  return seqViews().filter(v => Object.entries(S.facets).every(([k, val]) => !val || v.facets[k] === val));
+}
+function fillSelect(sel, options, value) {
+  sel.innerHTML = options.map(([v, t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join('');
+  if (value != null && options.some(o => o[0] === value)) sel.value = value;
+}
+
+function buildSeq() {
+  const types = [...new Set(M.views.map(v => v.sequence_type))].sort();
+  if (!S.seq) S.seq = types.includes(DOM.default_type) ? DOM.default_type : types[0];
+  fillSelect($('seq'), types.map(t => [t, `${valueName('sequence_type', t)} (${M.views.filter(v => v.sequence_type === t).length})`]), S.seq);
+}
+
+function buildFacets() {
+  const views = seqViews();
+  const box = $('facets');
+  box.innerHTML = '';
+  for (const [key, title] of DOM.facets) {
+    // A view without this facet shows under "any" only.
+    const values = [...new Set(views.map(v => v.facets[key]))].filter(v => v != null)
+      .sort((a, b) => valueName(key, a).localeCompare(valueName(key, b), undefined, { numeric: true }));
+    if (values.length < 2) continue;
+    const div = document.createElement('div');
+    div.className = 'facet';
+    div.innerHTML = `<label class="f">${title}</label><select data-k="${esc(key)}"></select>`;
+    const sel = div.querySelector('select');
+    fillSelect(sel, [['', `any (${values.length})`], ...values.map(v => [v, valueName(key, v)])], S.facets[key] || '');
+    sel.onchange = () => { S.facets[key] = sel.value; buildViewSelect(true); };
+    box.appendChild(div);
+  }
+}
+
+function buildViewSelect(switchIfGone) {
+  const views = filteredViews().sort((a, b) => viewLabel(a).localeCompare(viewLabel(b), undefined, { numeric: true }));
+  $('nviews').textContent = `(${views.length})`;
+  fillSelect($('view'), views.map(v => [v.id, experimentOf(v) ? `${viewLabel(v)} · ${experimentOf(v)}` : viewLabel(v)]), S.view);
+  if (!views.some(v => v.id === S.view)) {
+    if (!views.length) return;
+    if (switchIfGone) { S.view = views[0].id; showView(); }
+  }
+  $('view').value = S.view;
+}
+
+// How to colour by a validation set: its numeric value, or for a set that is only categories
+// (the opening Routes, Endpoint_quadrant) its labels.
+function colourKey(set) { return (T && T.value[set] ? 'value:' : 'label:') + set; }
+
+function buildColorSelect() {
+  const t = M.tables[VM.table];
+  const focus = focusOf(S.seq), first = firstOf(S.seq);
+  const firstly = cols => [...first.filter(c => cols.includes(c)), ...cols.filter(c => !first.includes(c))];
+  $('lsub').style.display = subsetOf(S.seq) ? '' : 'none';
+  $('lsub').querySelectorAll('button').forEach(b => b.classList.toggle('on', (b.dataset.ls === '1') === S.ls));
+  const labels = t.label.filter(inSubset);
+  const behav = labels.filter(c => c.endsWith('_value'));
+  const other = firstly(labels.filter(c => !c.endsWith('_value')));
+  const ordered = firstly(behav);
+  const star = c => focus.includes(c) ? ' ★' : '';
+  const og = (title, opts) => `<optgroup label="${esc(title)}">${opts.map(([v, x]) => `<option value="${esc(v)}">${esc(x)}</option>`).join('')}</optgroup>`;
+  $('color').innerHTML =
+    og('Map', [['cluster', `${DOM.clusterer ? DOM.clusterer + ' cluster' : 'Cluster'} (${VM.n_clusters})`]]) +
+    og(`${DOM.label_noun} value`, ordered.map(c => [`value:${c}`, pretty(c) + star(c)])) +
+    og(`${DOM.label_noun} bin`, ordered.map(c => [`label:${c}`, pretty(c) + ' (bin)'])) +
+    og(DOM.other_group, other.map(c => [colourKey(c), pretty(c) + star(c)])) +
+    og('Metadata', t.meta.filter(c => !DOM.hidden_colours.includes(c)).map(c => [`meta:${c}`, c]));
+  if (![...$('color').options].some(o => o.value === S.color)) { S.color = 'cluster'; S.isolate = null; }
+  $('color').value = S.color;
+  fillSelect($('rk-set'), [...ordered, ...other].map(c => [c, pretty(c)]), S.rkSet || focus.find(c => t.label.includes(c)) || behav[0]);
+  S.rkSet = $('rk-set').value;
+}
+
+// ---------------------------------------------------------------- colouring
+function colourInfo() {
+  // -> {kind:'cat'|'num', missing:Uint8Array, cats?, catIndex?, values?, name}
+  const n = T.keys.length;
+  const missing = new Uint8Array(n);
+  const [mode, col] = S.color.includes(':') ? S.color.split(/:(.*)/s) : ['cluster', null];
+  if (mode !== 'cluster' && !({ label: T.label, value: T.value, meta: T.meta }[mode] || {})[col]) {
+    S.color = 'cluster'; S.isolate = null; $('color').value = 'cluster';  // nothing to colour by: never leave the map undrawn
+    return colourInfo();
+  }
+  let raw, kind, name;
+  if (mode === 'cluster') { raw = V.cluster; kind = 'cat'; name = 'cluster'; for (let i = 0; i < n; i++) if (raw[i] === -1) missing[i] = 1; }
+  else if (mode === 'label') { raw = T.label[col]; kind = 'cat'; name = pretty(col) + (T.value[col] ? ' bin' : ''); for (let i = 0; i < n; i++) if (raw[i] === -1 || raw[i] == null) missing[i] = 1; }
+  else if (mode === 'value') {
+    raw = T.value[col]; kind = 'num'; name = pretty(col);
+    const lab = T.label[col];
+    for (let i = 0; i < n; i++) if (raw[i] == null || (lab && lab[i] === -1)) missing[i] = 1;
+  } else {
+    raw = T.meta[col]; name = col;
+    const uniq = new Set(raw);
+    kind = uniq.size <= 12 || raw.some(v => typeof v === 'string') ? 'cat' : 'num';
+    for (let i = 0; i < n; i++) if (raw[i] == null) missing[i] = 1;
+  }
+  const info = { kind, missing, name, raw, mode, catName: c => mode === 'label' ? labelName(col, c) : String(c) };
+  if (kind === 'cat') {
+    const cats = [...new Set(raw.filter((_, i) => !missing[i]))]
+      .sort((a, b) => typeof a === 'number' && typeof b === 'number' ? a - b : String(a).localeCompare(String(b)));
+    info.cats = cats;
+    info.catIndex = new Map(cats.map((c, i) => [c, i]));
+    info.counts = cats.map(c => 0);
+    for (let i = 0; i < n; i++) if (!missing[i]) info.counts[info.catIndex.get(raw[i])]++;
+  } else {
+    const vals = raw.filter((v, i) => !missing[i]).sort((a, b) => a - b);
+    info.lo = vals[Math.floor(vals.length * 0.02)] ?? 0;
+    info.hi = vals[Math.ceil(vals.length * 0.98) - 1] ?? 1;
+    if (info.lo === info.hi) info.hi = info.lo + 1e-9;
+  }
+  const note = { cluster: `grey = ${DOM.clusterer ? DOM.clusterer + ' ' : ''}noise`, label: T.value[col] ? `grey = ${NOTES.undefined}` : `grey = ${NOTES.no_label}`, value: col && !col.endsWith('_value') ? '' : `grey = ${NOTES.undefined}; colour range 2–98th percentile`, meta: '' }[mode];
+  const nm = missing.reduce((a, b) => a + b, 0);
+  $('colornote').textContent = (note ? note + ' · ' : '') + `${nm} of ${n} grey`;
+  return info;
+}
+
+function traces() {
+  const info = pointColorInfo = colourInfo();
+  const n = T.keys.length, three = S.dim === 3;
+  const pca = S.red === 'pca';
+  const X = pca ? V.p1 : three ? V.x3 : V.x, Y = pca ? V.p2 : three ? V.y3 : V.y, Z = three ? (pca ? V.p3 : V.z3) : null;
+  const bg = [], fg = [];
+  for (let i = 0; i < n; i++) {
+    const off = info.missing[i] || (S.isolate != null && info.kind === 'cat' && info.raw[i] !== S.isolate);
+    (off ? bg : fg).push(i);
+  }
+  const type = three ? 'scatter3d' : 'scattergl';
+  const size = three ? Math.max(1, S.psize * 0.55) : S.psize;
+  const mk = (idx, marker, name) => {
+    const t = { type, mode: 'markers', name, customdata: idx, hoverinfo: 'none', marker,
+      x: idx.map(i => X[i]), y: idx.map(i => Y[i]) };
+    if (three) t.z = idx.map(i => Z[i]);
+    return t;
+  };
+  if (S.show === 'density' && !three) return [...densityTraces(info, X, Y, fg, size, mk), ...overlays(n, size, three, mk)];
+  const out = [mk(bg, { color: css('--missing'), size: size * 0.8, opacity: three ? 0.35 : 0.45 }, 'grey')];
+  if (info.kind === 'cat') {
+    out.push(mk(fg, { color: fg.map(i => PALETTE[info.catIndex.get(info.raw[i]) % PALETTE.length]), size, opacity: 0.85 }, 'points'));
+  } else {
+    out.push(mk(fg, { color: fg.map(i => info.raw[i]), colorscale: seqScale(), cmin: info.lo, cmax: info.hi, size, opacity: 0.85,
+      showscale: true, colorbar: { title: { text: info.name, side: 'right', font: { color: css('--muted') } }, thickness: 12, len: 0.6,
+        outlinewidth: 0, tickfont: { color: css('--muted') } } }, 'points'));
+  }
+  return [...out, ...overlays(n, size, three, mk)];
+}
+
+// The highlight ring and the pinned marker, drawn over either view.
+function overlays(n, size, three, mk) {
+  const out = [];
+  if (S.find) {
+    const hit = [];
+    for (let i = 0; i < n; i++) if (T.keys[i].includes(S.find)) hit.push(i);
+    out.push(mk(hit, { color: 'rgba(0,0,0,0)', size: size + 6, line: { color: css('--hl'), width: 2 } }, 'highlight'));
+  }
+  if (S.pinned != null) out.push(mk([S.pinned], { color: css('--hl'), size: size + 8, symbol: three ? 'diamond' : 'star', line: { color: '#fff', width: 1 } }, 'pinned'));
+  return out;
+}
+
+// ---------------------------------------------------------------- density (2-D only)
+// A Gaussian KDE of the map on a square grid: points binned into cells, then blurred with a
+// separable Gaussian. The bandwidth is a fraction (S.bw) of Scott's rule over all the map's
+// points, so every subset of one map is smoothed alike. What is shown follows the colour:
+//   a class or label (isolate one in the legend to see it alone): the density of the shown
+//     points; "vs all" is log2 of its normalised density over that of every point (where the
+//     subset is over- or under-represented), masked where the map has almost no points;
+//   a number: its kernel-weighted mean at each place, masked where its points are sparse.
+const GRID = 200;
+function kdeGrid(X, Y) {
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity, mx = 0, my = 0;
+  const n = X.length;
+  for (let i = 0; i < n; i++) { x0 = Math.min(x0, X[i]); x1 = Math.max(x1, X[i]); y0 = Math.min(y0, Y[i]); y1 = Math.max(y1, Y[i]); mx += X[i]; my += Y[i]; }
+  mx /= n; my /= n;
+  let vx = 0, vy = 0;
+  for (let i = 0; i < n; i++) { vx += (X[i] - mx) ** 2; vy += (Y[i] - my) ** 2; }
+  const h = Math.sqrt((vx + vy) / (2 * n)) * n ** (-1 / 6) * S.bw;  // isotropic: the axes share one scale
+  const pad = 3 * h, cell = (Math.max(x1 - x0, y1 - y0) + 2 * pad) / (GRID - 1) || 1e-9;
+  return { x0: x0 - pad, y0: y0 - pad, cell, nx: Math.ceil((x1 - x0 + 2 * pad) / cell) + 1, ny: Math.ceil((y1 - y0 + 2 * pad) / cell) + 1, h };
+}
+function blur(g, field) {
+  const { nx, ny } = g, s = Math.max(g.h / g.cell, 0.5), r = Math.ceil(3 * s);
+  const k = Array.from({ length: 2 * r + 1 }, (_, j) => Math.exp(-0.5 * ((j - r) / s) ** 2));
+  const tmp = new Float64Array(nx * ny), out = new Float64Array(nx * ny);
+  for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
+    let a = 0; for (let j = -r; j <= r; j++) { const xx = x + j; if (xx >= 0 && xx < nx) a += field[y * nx + xx] * k[j + r]; }
+    tmp[y * nx + x] = a;
+  }
+  for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
+    let a = 0; for (let j = -r; j <= r; j++) { const yy = y + j; if (yy >= 0 && yy < ny) a += tmp[yy * nx + x] * k[j + r]; }
+    out[y * nx + x] = a;
+  }
+  return out;
+}
+function binned(g, X, Y, idx, weight) {
+  const f = new Float64Array(g.nx * g.ny);
+  for (const i of idx) {
+    const cx = Math.round((X[i] - g.x0) / g.cell), cy = Math.round((Y[i] - g.y0) / g.cell);
+    f[cy * g.nx + cx] += weight ? weight(i) : 1;
+  }
+  return f;
+}
+function densityTraces(info, X, Y, fg, size, mk) {
+  const n = X.length, g = kdeGrid(X, Y), cut = 0.02;
+  const all = blur(g, binned(g, X, Y, Array.from({ length: n }, (_, i) => i)));
+  const sub = blur(g, binned(g, X, Y, fg));
+  let allMax = 0, subMax = 0;
+  for (let c = 0; c < all.length; c++) { allMax = Math.max(allMax, all[c]); subMax = Math.max(subMax, sub[c]); }
+  const grid = cellValue => Array.from({ length: g.ny }, (_, y) => Array.from({ length: g.nx }, (_, x) => cellValue(y * g.nx + x)));
+  let z, title, scale, zmin, zmax;
+  if (info.kind === 'num') {
+    const sum = blur(g, binned(g, X, Y, fg, i => info.raw[i]));
+    z = grid(c => sub[c] > cut * subMax ? sum[c] / sub[c] : null);
+    title = `mean ${info.name}`; scale = seqScale(); zmin = info.lo; zmax = info.hi;
+  } else if (S.dref === 'rel') {
+    const ns = Math.max(1, fg.length);
+    z = grid(c => all[c] > cut * allMax ? Math.max(-3, Math.min(3, Math.log2((sub[c] / ns + 1e-12) / (all[c] / n)))) : null);
+    title = 'log2 vs all'; scale = 'RdBu'; zmin = -3; zmax = 3;
+  } else {
+    z = grid(c => sub[c] > cut * subMax ? sub[c] / subMax : null);
+    title = 'density'; scale = seqScale(); zmin = 0; zmax = 1;
+  }
+  const heat = { type: 'heatmap', x0: g.x0, dx: g.cell, y0: g.y0, dy: g.cell, z, zsmooth: 'best', colorscale: scale, zmin, zmax,
+    hoverinfo: 'skip',
+    colorbar: { title: { text: title, side: 'right', font: { color: css('--muted') } }, thickness: 12, len: 0.6, outlinewidth: 0, tickfont: { color: css('--muted') } } };
+  $('bwnote').textContent = `×${S.bw} Scott · h = ${fmt(g.h)}`;
+  // The points stay on the map, faint, so hover, pinning and the lasso still work.
+  const pts = mk(fg, { color: css('--text'), size: Math.max(1, size * 0.5), opacity: 0.12 }, 'points');
+  return [heat, pts];
+}
+
+function layout() {
+  const axis = { showgrid: false, zeroline: false, showticklabels: false, title: '' };
+  const base = { margin: { l: 0, r: 0, t: 0, b: 0 }, paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+    showlegend: false, dragmode: S.dim === 3 ? 'orbit' : 'lasso', uirevision: S.view + S.red + S.dim, font: { color: css('--text') } };
+  if (S.dim === 3) {
+    const a3 = { ...axis, showbackground: false, showspikes: false, color: css('--muted') };
+    const scene = { xaxis: a3, yaxis: a3, zaxis: a3, aspectmode: 'data', uirevision: S.view + S.red };
+    if (S.camera) scene.camera = S.camera;
+    return { ...base, scene };
+  }
+  return { ...base, xaxis: axis, yaxis: { ...axis, scaleanchor: 'x' } };
+}
+
+let legendMin = innerWidth < 1400;
+function drawLegend() {
+  const info = pointColorInfo, box = $('legend');
+  if (info.kind !== 'cat') { box.style.display = 'none'; return; }
+  box.style.display = 'block';
+  const order = info.cats.map((c, i) => i).sort((a, b) => info.counts[b] - info.counts[a]);
+  const rows = order.slice(0, 80).map(i => {
+    const c = info.cats[i];
+    const off = S.isolate != null && S.isolate !== c;
+    return `<div class="it${off ? ' off' : ''}" data-i="${i}"><span class="sw" style="background:${PALETTE[i % PALETTE.length]}"></span>${info.mode === 'cluster' ? 'cluster ' : ''}${esc(info.catName(c))}<span class="n">${info.counts[i]}</span></div>`;
+  });
+  if (order.length > 80) rows.push(`<div class="note more">+${order.length - 80} more</div>`);
+  box.classList.toggle('min', legendMin);
+  box.innerHTML = `<div class="note head" id="lghead">${legendMin ? '▸' : '▾'} ${esc(info.name)} (${info.cats.length})` +
+    `${S.isolate != null ? ' · <a href="#" id="unisolate">show all</a>' : ''}</div>` + rows.join('');
+  $('lghead').onclick = e => { if (e.target.id === 'unisolate') return; legendMin = !legendMin; drawLegend(); };
+  box.querySelectorAll('.it').forEach(el => el.onclick = () => {
+    const c = info.cats[Number(el.dataset.i)];
+    S.isolate = S.isolate === c ? null : c;
+    draw();
+  });
+  const u = $('unisolate'); if (u) u.onclick = e => { e.preventDefault(); S.isolate = null; draw(); };
+}
+
+// uirevision alone loses the 3-D camera when a recolour lands before Plotly has recorded the
+// last orbit, so read the live camera off the scene before every redraw and pass it back.
+let drawn3d = null;  // the view and reducer whose 3-D map is on screen
+function keepCamera() {
+  const scene = $('plot')._fullLayout?.scene?._scene;
+  if (drawn3d === S.view + S.red && scene && scene.getCamera) S.camera = scene.getCamera();
+}
+
+function draw() {
+  if (!V || !T) return;
+  syncMapButtons();
+  if (S.dim === 3) keepCamera();
+  drawn3d = S.dim === 3 ? S.view + S.red : null;
+  Plotly.react('plot', traces(), layout(), { responsive: true, displaylogo: false, scrollZoom: true,
+    // The camera button saves the map as drawn, at 3× for print (WebGL points export as pixels).
+    toImageButtonOptions: { format: 'png', scale: 3, filename: `${S.seq}_${viewLabel(VM)}_${S.color.replace(':', '-')}`.replace(/[^\w.-]+/g, '_') },
+    modeBarButtonsToRemove: ['autoScale2d', 'hoverClosestCartesian', 'hoverCompareCartesian', 'toggleSpikelines'] });
+  drawLegend();
+  writeHash();
+}
+
+// Falls back to what the view has (no PCA for a padded raw floor, no 3-D map unless stored,
+// no 2-D map for a 3-D-only view) and shows the choice on the buttons.
+function syncMapButtons() {
+  if (S.red === 'pca' && !V.p1) S.red = 'umap';
+  const has2d = S.red === 'pca' ? !!V.p1 : !!V.x;
+  const has3d = S.red === 'pca' ? !!V.p3 : !!V.x3;
+  if (S.dim === 3 && !has3d) S.dim = 2;
+  if (S.dim === 2 && !has2d) S.dim = 3;
+  $('red').querySelector('[data-r="pca"]').disabled = !V.p1;
+  $('dim').querySelector('[data-d="2"]').disabled = !has2d;
+  $('dim').querySelector('[data-d="3"]').disabled = !has3d;
+  document.querySelectorAll('#red button').forEach(b => b.classList.toggle('on', b.dataset.r === S.red));
+  document.querySelectorAll('#dim button').forEach(b => b.classList.toggle('on', Number(b.dataset.d) === S.dim));
+  $('show').querySelector('[data-k="density"]').disabled = S.dim === 3;
+  document.querySelectorAll('#show button').forEach(b => b.classList.toggle('on', b.dataset.k === (S.dim === 3 ? 'points' : S.show)));
+  document.querySelectorAll('#dref button').forEach(b => b.classList.toggle('on', b.dataset.ref === S.dref));
+  document.querySelectorAll('#cmap button').forEach(b => b.classList.toggle('on', b.dataset.c === S.cmap));
+  $('densctl').style.display = S.show === 'density' && S.dim === 2 ? 'block' : 'none';
+  $('bw').value = S.bw;
+  const ev = VM.pca_explained;
+  $('mapnote').textContent = S.red !== 'pca' ? '' :
+    (ev ? `PC1–${S.dim} explain ${ev.slice(0, S.dim).map(v => v == null ? '–' : Math.round(v * 100) + '%').join(' · ')} of the variance. ` : '') +
+    `Clusters are ${DOM.clusterer ? DOM.clusterer + ' ' : ''}on the ${DOM.map_name === 'Map' ? '' : DOM.map_name + ' '}map.`;
+}
+
+// ---------------------------------------------------------------- right panels
+function measureOf(view, set, m) {
+  const r = view.measures.find(r => r.validation_set === set);
+  return r ? r[m] : null;
+}
+
+// A view's own summary lines (another domain's views may carry them): name, value, note.
+function summaryHtml() {
+  if (!Array.isArray(VM.summary) || !VM.summary.length) return '';
+  return '<dl>' + VM.summary.map(r => `<dt>${esc(r.name)}</dt><dd>${typeof r.value === 'number' || r.value == null ? fmt(r.value) : esc(r.value)}` +
+    `${r.note ? ` <span class="note">${esc(r.note)}</span>` : ''}</dd>`).join('') + '</dl>' + (NOTES.summary ? `<div class="note">${NOTES.summary}</div>` : '');
+}
+
+function drawMeasures() {
+  const focus = focusOf(S.seq), lead = DOM.measure_columns[0][0];
+  const cols = DOM.measure_columns.filter(([k]) => !k.startsWith('full_') || VM.measures.some(r => r[k] != null));
+  const fs = VM.full_space;
+  const full = fs && cols.some(([k]) => k.startsWith('full_'))
+    ? `<br>full = ${DOM.full_space_names[fs.space] || DOM.full_space_names.default}, ${esc(fs.dims)} dims, ${esc(fs.metric)}` : '';
+  // A clicked column ranks every set by it (missing values last); the default keeps the focus
+  // sets first, each group by the lead column.
+  const sortKey = cols.some(([k]) => k === S.msort.key) ? S.msort.key : null, dir = S.msort.desc ? 1 : -1;
+  const subset = S.ls && subsetOf(S.seq)
+    ? `<br>${esc(DOM.label_subset.name)} labels only${DOM.label_subset.note ? ` (${DOM.label_subset.note})` : ''}` : '';
+  const rows = VM.measures.filter(r => inSubset(r.validation_set)).sort((a, b) => {
+    if (sortKey) {
+      const va = a[sortKey], vb = b[sortKey];
+      if ((va == null) !== (vb == null)) return va == null ? 1 : -1;
+      return dir * ((vb ?? 0) - (va ?? 0));
+    }
+    const fa = focus.indexOf(a.validation_set), fb = focus.indexOf(b.validation_set);
+    if ((fa < 0) !== (fb < 0)) return fa < 0 ? 1 : -1;
+    return (b[lead] ?? -9) - (a[lead] ?? -9);
+  });
+  const cur = S.color.split(/:(.*)/s)[1];
+  const arrow = k => k === sortKey ? (S.msort.desc ? ' ▼' : ' ▲') : '';
+  $('p-measures').innerHTML =
+    `<div class="note">${esc(viewLabel(VM))}${experimentOf(VM) ? ` · ${esc(experimentOf(VM))}` : ''} · n = ${esc(VM.n)} · ${esc(VM.n_clusters)} clusters` +
+    `${VM.model ? `<br>checkpoint <code>${esc(VM.model)}</code>` : ''}${full}${subset}<br>Click a row to colour by it, a column name to sort by it. ${NOTES.focus}</div>` + summaryHtml() +
+    `<table><tr><th class="sort${sortKey ? '' : ' sorted'}" data-k="" title="Focus sets first">Set</th>` +
+    `${cols.map(([k, t, tip]) => `<th class="num sort${k === sortKey ? ' sorted' : ''}" data-k="${k}" title="${tip || t} · click to sort">${t}${arrow(k)}</th>`).join('')}</tr>` +
+    rows.map(r => `<tr class="click${r.validation_set === cur ? ' cur' : ''}" data-s="${esc(r.validation_set)}"><td title="${esc(r.validation_set.replace(/_value$/, ''))}">${esc(pretty(r.validation_set))}${focus.includes(r.validation_set) ? ' ★' : ''}</td>` +
+      cols.map(([k]) => `<td class="num">${esc(fmt(r[k]))}</td>`).join('') + '</tr>').join('') +
+    `</table><div class="note">${NOTES.measures}${NOTES.caption ? ' ' + NOTES.caption : ''}</div>`;
+  // A measure header sorts high to low, a second click low to high; "Set" restores the default.
+  $('p-measures').querySelectorAll('th.sort').forEach(th => th.onclick = () => {
+    const k = th.dataset.k || null;
+    S.msort = { key: k, desc: k && k === S.msort.key ? !S.msort.desc : true };
+    drawMeasures(); writeHash();
+  });
+  $('p-measures').querySelectorAll('tr.click').forEach(tr => tr.onclick = () => {
+    const set = tr.dataset.s;
+    S.color = colourKey(set); S.isolate = null; S.rkSet = set;
+    $('color').value = S.color; $('rk-set').value = set;
+    draw(); drawMeasures(); drawRanking();
+  });
+}
+
+function drawRanking() {
+  const set = S.rkSet, m = S.rkMeasure;
+  const rows = seqViews().map(v => [v, measureOf(v, set, m)]).sort((a, b) => (b[1] ?? -Infinity) - (a[1] ?? -Infinity));
+  const max = Math.max(1e-9, ...rows.map(r => r[1] ?? 0));
+  const mTitle = (DOM.measures.find(([k]) => k === m) || [m, m])[1];
+  $('rk-table').innerHTML = `<table><tr><th>View</th><th class="num">${esc(mTitle)}</th><th style="width:70px"></th></tr>` +
+    rows.map(([v, val]) => `<tr class="click${v.id === S.view ? ' cur' : ''}" data-v="${esc(v.id)}"><td>${esc(viewLabel(v))}<div class="note" style="margin:0">${esc(experimentOf(v))}</div></td>` +
+      `<td class="num">${esc(fmt(val))}</td><td><div class="bar" style="width:${Math.max(0, (val ?? 0) / max * 100)}%"></div></td></tr>`).join('') + `</table>`;
+  $('rk-table').querySelectorAll('tr.click').forEach(tr => tr.onclick = () => { S.view = tr.dataset.v; $('view').value = S.view; showView(); });
+}
+
+// ---------------------------------------------------------------- boards (domain media 'board')
+// A table's boards (build_explorer.py's data/boards_<table>.js): per point the start FEN, the piece
+// placement after every ply, uci, san and the focal colour. Loaded with the table's first view.
+let BD = null;
+const GLYPH = { k: '♚', q: '♛', r: '♜', b: '♝', n: '♞', p: '♟' };
+function ensureBoards() {
+  if (DOM.media !== 'board' || BD?.table === VM.table) return;
+  const table = VM.table, none = { table, boards: [] };
+  if (!M.tables[table]?.has_boards) { BD = none; return; }
+  BD = null;  // "loading boards…" until this table's arrive (never another table's boards)
+  const ready = b => { if (VM.table === table) { BD = b; drawPinned(); drawSelection(selected); } };
+  load('boards', table).then(d => ready({ table, ...d })).catch(() => ready(none));
+}
+const nPlies = i => BD?.boards?.[i]?.length ?? 0;
+function boardGrid(i, ply, width) {
+  const placement = ply === 0 ? BD.start[i].split(' ')[0] : BD.boards[i][ply - 1];
+  const uci = ply > 0 ? BD.uci[i][ply - 1] : null;
+  const hl = uci ? [uci.slice(0, 2), uci.slice(2, 4)] : [];
+  const cells = [];
+  placement.split('/').forEach((row, r) => {
+    let f = 0;
+    for (const ch of row) {
+      if (/\d/.test(ch)) { for (let k = 0; k < Number(ch); k++) cells.push({ r, f: f++, p: null }); }
+      else cells.push({ r, f: f++, p: ch });
+    }
+  });
+  if (BD.focal[i] === 'black') cells.reverse();  // the focal player's side at the bottom
+  const fs = Math.max(8, Math.round(width / 8 * 0.78));
+  return `<div class="board" style="width:${width}px">` + cells.map(c => {
+    const sq = 'abcdefgh'[c.f] + (8 - c.r);
+    const cls = ((c.r + c.f) % 2 ? 'd' : 'l') + (hl.includes(sq) ? ' hl' : '');
+    const piece = c.p ? `<span class="${c.p === c.p.toUpperCase() ? 'w' : 'b'}">${GLYPH[c.p.toLowerCase()]}\uFE0E</span>` : '';
+    return `<div class="sq ${cls}" style="font-size:${fs}px">${piece}</div>`;
+  }).join('') + '</div>';
+}
+// The plies as move text: focal moves (even plies) brighter, the one shown in bold.
+function pliesHtml(i, ply, width) {
+  const [, side, , , , full] = BD.start[i].split(' ');
+  const whiteFirst = side === 'w';
+  const parts = BD.san[i].map((san, k) => {
+    const white = (k % 2 === 0) === whiteFirst;
+    const num = Number(full) + Math.floor((k + (whiteFirst ? 0 : 1)) / 2);
+    const label = (white ? `${num}.` : (k === 0 ? `${num}...` : '')) + esc(san ?? '…');
+    return `<span class="${k === ply - 1 ? 'cur' : k % 2 === 0 ? 'foc' : ''}">${label}</span>`;
+  });
+  return `<div class="plies" style="max-width:${width}px">ply ${ply}/${parts.length} · ${parts.join(' ')}</div>`;
+}
+function boardHtml(i, width, ply) {
+  if (!BD) return `<div class="gifbox none" style="width:${width}px">loading boards…</div>`;
+  if (!BD.boards[i]) return `<div class="gifbox none" style="width:${width}px">no board</div>`;
+  return boardGrid(i, ply, width);
+}
+const hasMedia = i => DOM.media === 'gif' ? !!T.gif[i] : DOM.media === 'board' ? BD?.table === VM.table && !!BD.boards[i] : false;
+// The hover card's board plays the unit's plies as the GIF plays a sequence.
+let cardTimer = null;
+function playCard(i) {
+  clearInterval(cardTimer);
+  let ply = 0;
+  cardTimer = setInterval(() => {
+    const box = $('cardmedia');
+    if (!box || hovered !== i || !BD?.boards[i]) return;
+    ply = (ply + 1) % (nPlies(i) + 2);  // one extra beat on the last position
+    const p = Math.min(ply, nPlies(i));
+    box.innerHTML = boardGrid(i, p, S.gsize) + pliesHtml(i, p, S.gsize);
+    placeCard();
+  }, 700);
+}
+
+function gifHtml(i, width) {
+  if (DOM.media === 'board') return boardHtml(i, width, BD?.boards[i] ? nPlies(i) : 0);
+  if (DOM.media === 'none') return '';
+  const key = T.keys[i];
+  if (!T.gif[i]) return `<div class="gifbox none" style="width:${width}px">not rendered</div>`;
+  return `<img src="${esc(M.gif_base)}${encodeURIComponent(key)}.gif" width="${width}" alt="${esc(key)}" onerror="this.outerHTML='<div class=&quot;gifbox none&quot; style=&quot;width:${width}px&quot;>missing</div>'">`;
+}
+
+function pointValue(i) {
+  const info = pointColorInfo;
+  if (!info) return '';
+  if (info.missing[i]) return info.mode === 'cluster' ? 'noise' : '–';
+  return info.kind === 'num' ? fmt(info.raw[i]) : info.catName(info.raw[i]);
+}
+
+// A categorical label's code as the value it stands for (a route's junctions, a quadrant, how
+// an attack ended), when the view stored the names; the code otherwise.
+function labelName(col, code) {
+  const name = (M.tables[VM.table].label_names || {})[col]?.[code];
+  return name == null ? String(code) : String(name).replaceAll('>', ' → ');
+}
+
+function drawPinned() {
+  const i = S.pinned, box = $('p-pinned');
+  if (i == null) { box.innerHTML = '<div class="note">Click a point to pin it here.</div>'; return; }
+  // The categorical labels (no value column) defined for this point, by name where the view has names.
+  const named = Object.keys(T.label).filter(c => !T.value[c] && !T.meta[c] && T.label[c][i] != null && T.label[c][i] !== -1);
+  const metaValue = v => Number.isInteger(v) ? String(v) : fmt(v);
+  const meta = Object.keys(T.meta).map(c => `<dt>${esc(c)}</dt><dd>${esc(metaValue(T.meta[c][i]))}</dd>`).join('') +
+    named.map(c => `<dt>${esc(pretty(c))}</dt><dd>${esc(labelName(c, T.label[c][i]))}</dd>`).join('');
+  const sets = Object.keys(T.value).filter(c => T.label[c] && T.label[c][i] !== -1 && T.value[c][i] != null)
+    .map(c => `<dt>${esc(pretty(c))}</dt><dd>${fmt(T.value[c][i])} <span class="note">bin ${T.label[c][i]}</span></dd>`).join('');
+  // The media fills the pinned card's width, but stays short enough to leave the controls under
+  // it on screen (a board is as tall as it is wide).
+  // While its tab is hidden the card has no width; tab() redraws it when shown.
+  const cs = getComputedStyle(box), inner = box.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const width = Math.max(160, Math.min(inner, innerHeight - 200));
+  const boards = DOM.media === 'board' && BD?.boards[i];
+  if (boards) S.pinPly = Math.max(0, Math.min(S.pinPly, nPlies(i)));
+  const media = boards
+    ? `${boardGrid(i, S.pinPly, width)}<div class="row" style="margin-top:6px"><button class="small" id="ply0">⏮</button>` +
+      `<button class="small" id="plyprev">◀</button><button class="small" id="plynext">▶</button><button class="small" id="plyend">⏭</button></div>` +
+      pliesHtml(i, S.pinPly, width)
+    : gifHtml(i, width);
+  box.innerHTML = `<div class="row" style="justify-content:space-between"><code>${esc(T.keys[i])}</code><button class="small" id="unpin" style="flex:none">Unpin</button></div>` +
+    `<div class="pinmedia" style="margin:8px 0">${media}</div>` +
+    `<dl><dt>cluster</dt><dd>${V.cluster[i] === -1 ? 'noise' : V.cluster[i]}</dd>${meta}</dl>` +
+    `<div class="note">${NOTES.point_labels}</div><dl>${sets || '<dd>none</dd>'}</dl>`;
+  $('unpin').onclick = () => { S.pinned = S.pinnedKey = null; drawPinned(); draw(); };
+  if (boards) {
+    const step = to => () => { S.pinPly = to(); drawPinned(); };
+    $('ply0').onclick = step(() => 0);
+    $('plyprev').onclick = step(() => Math.max(0, S.pinPly - 1));
+    $('plynext').onclick = step(() => Math.min(nPlies(i), S.pinPly + 1));
+    $('plyend').onclick = step(() => nPlies(i));
+  }
+}
+
+let selected = null;  // the lassoed points, redrawn when the boards arrive
+function drawSelection(idx) {
+  selected = idx;
+  const box = $('p-selection');
+  if (!idx || !idx.length) { box.innerHTML = '<div class="note">Lasso or box-select points on the 2-D map.</div>'; return; }
+  const counts = new Map();
+  idx.forEach(i => { const c = V.cluster[i]; counts.set(c, (counts.get(c) || 0) + 1); });
+  const top = [...counts].sort((a, b) => b[1] - a[1]).slice(0, 8)
+    .map(([c, k]) => `<span class="chip">${c === -1 ? 'noise' : 'c' + c}: ${k}</span>`).join('');
+  const info = pointColorInfo;
+  let summary = '';
+  if (info && info.kind === 'num') {
+    const vals = idx.filter(i => !info.missing[i]).map(i => info.raw[i]);
+    const all = info.raw.filter((_, i) => !info.missing[i]);
+    const mean = a => a.reduce((s, v) => s + v, 0) / Math.max(1, a.length);
+    summary = `<div class="note">${esc(info.name)}: mean ${fmt(mean(vals))} here (n=${vals.length}) vs ${fmt(mean(all))} overall</div>`;
+  }
+  const users = new Set(idx.map(i => T.meta[DOM.participant] ? T.meta[DOM.participant][i] : null));
+  // Without hover media the gallery lists the first keys.
+  const withGif = DOM.media === 'none' ? idx : idx.filter(hasMedia);
+  const shown = withGif.slice(0, 60);
+  box.innerHTML = `<div class="row" style="justify-content:space-between"><b>${idx.length} selected</b><button class="small" id="clearsel" style="flex:none">Clear</button></div>` +
+    `<div class="note">${[T.meta[DOM.participant] ? `${users.size} ${DOM.participants_noun}` : '', DOM.media === 'none' ? '' : `${withGif.length} with a ${DOM.media === 'board' ? 'board' : 'GIF'}`].filter(Boolean).join(' · ')}${withGif.length > shown.length ? `${DOM.media === 'none' ? '' : ','} first ${shown.length} shown` : ''}</div>${summary}<div>${top}</div>` +
+    `<div class="gallery">${shown.map(i => `<figure data-i="${i}">${gifHtml(i, 100)}<figcaption>${esc(T.keys[i])}</figcaption></figure>`).join('')}</div>`;
+  box.querySelectorAll('figure').forEach(f => f.onclick = () => pin(Number(f.dataset.i)));
+  $('clearsel').onclick = () => { drawSelection(null); draw(); };
+}
+
+function pin(i) { S.pinned = i; S.pinnedKey = T.keys[i]; S.pinPly = nPlies(i); tab('pinned'); draw(); }
+function tab(name) {
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.t === name));
+  document.querySelectorAll('.pane').forEach(p => p.classList.toggle('on', p.id === 'p-' + name));
+  if (name === 'pinned') drawPinned();  // sized now that it is shown
+}
+
+// ---------------------------------------------------------------- hover card
+let mouse = { x: 0, y: 0 };
+document.addEventListener('mousemove', e => { mouse = { x: e.clientX, y: e.clientY }; placeCard(); });
+function placeCard() {
+  const c = $('card');
+  if (c.style.display !== 'block') return;
+  const w = c.offsetWidth, h = c.offsetHeight;
+  let x = mouse.x + 18, y = mouse.y + 18;
+  if (x + w > innerWidth - 8) x = mouse.x - w - 18;
+  if (y + h > innerHeight - 8) y = Math.max(8, innerHeight - h - 8);
+  c.style.left = x + 'px'; c.style.top = y + 'px';
+}
+function showCard(i) {
+  const c = $('card');
+  const p = DOM.participant, user = T.meta[p] ? ` · ${esc(DOM.participant_label || p)} ${esc(T.meta[p][i])}` : '';
+  const board = DOM.media === 'board' && BD?.boards[i];
+  const media = board ? boardGrid(i, 0, S.gsize) + pliesHtml(i, 0, S.gsize) : gifHtml(i, S.gsize);
+  c.innerHTML = `<div id="cardmedia">${media}</div>` + `<div class="k">${esc(T.keys[i])}</div>` +
+    `<div class="v">cluster ${V.cluster[i] === -1 ? 'noise' : V.cluster[i]}${user}` +
+    `${S.color !== 'cluster' ? ` · ${esc(pointColorInfo.name)}: ${esc(pointValue(i))}` : ''}</div>`;
+  c.style.display = 'block';
+  placeCard();
+  if (board) playCard(i);
+}
+
+let hovered = null;  // the point under the cursor
+function wirePlot() {
+  const plot = $('plot');
+  plot.on('plotly_hover', d => { const p = d.points[0]; if (p && p.customdata != null) { hovered = p.customdata; showCard(p.customdata); } });
+  plot.on('plotly_unhover', () => { hovered = null; clearInterval(cardTimer); $('card').style.display = 'none'; });
+  // The 3-D scene emits plotly_click on every frame the button is held over a point, and each
+  // pin redraws the plot, so 3-D pins on a still mouseup instead (clickPins).
+  plot.on('plotly_click', d => { const p = d.points[0]; if (S.dim === 2 && p && p.customdata != null) pin(p.customdata); });
+  plot.on('plotly_selected', d => {
+    if (!d) return;
+    const idx = [...new Set(d.points.filter(p => p.data.name === 'points' || p.data.name === 'grey').map(p => p.customdata))];
+    drawSelection(idx); tab('selection');
+  });
+  plot.on('plotly_deselect', () => drawSelection(null));
+}
+
+function clickPins() {
+  let down = null;
+  $('plot').addEventListener('mousedown', e => { if (e.button === 0) down = { x: e.clientX, y: e.clientY }; }, true);
+  addEventListener('mouseup', e => {
+    if (e.button !== 0 || !down) return;
+    const still = Math.hypot(e.clientX - down.x, e.clientY - down.y) < 4;
+    down = null;
+    if (still && S.dim === 3 && hovered != null) { const i = hovered; setTimeout(() => pin(i)); }
+  }, true);
+}
+
+// Middle-drag pans both maps. 2-D: the axis ranges follow the mouse (the map's own left-drag
+// lassos). 3-D: Plotly's camera pans on right-drag and zooms on middle-drag, so middle-button
+// events are stopped before they reach the scene and re-sent as right-button ones.
+function middlePans() {
+  const plot = $('plot');
+  let pan2d = null, frame = null;
+  plot.addEventListener('mousedown', e => {
+    if (S.dim !== 2 || e.button !== 1) return;
+    e.preventDefault(); e.stopPropagation();
+    const xa = plot._fullLayout.xaxis, ya = plot._fullLayout.yaxis;
+    pan2d = { x: e.clientX, y: e.clientY, xr: xa.range.slice(), yr: ya.range.slice(),
+      sx: (xa.range[1] - xa.range[0]) / xa._length, sy: (ya.range[1] - ya.range[0]) / ya._length };
+  }, true);
+  addEventListener('mousemove', e => {
+    if (!pan2d) return;
+    const dx = (e.clientX - pan2d.x) * pan2d.sx, dy = (e.clientY - pan2d.y) * pan2d.sy;
+    const ranges = { 'xaxis.range': pan2d.xr.map(v => v - dx), 'yaxis.range': pan2d.yr.map(v => v + dy) };
+    if (frame) cancelAnimationFrame(frame);
+    frame = requestAnimationFrame(() => { frame = null; Plotly.relayout(plot, ranges); });
+  });
+  addEventListener('mouseup', e => { if (e.button === 1) pan2d = null; });
+
+  for (const type of ['mousedown', 'mousemove', 'mouseup']) {
+    plot.addEventListener(type, e => {
+      if (!e.isTrusted || S.dim !== 3) return;
+      if (type === 'mousemove' ? !(e.buttons & 4) : e.button !== 1) return;
+      e.preventDefault(); e.stopPropagation();
+      e.target.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true, view: window,
+        clientX: e.clientX, clientY: e.clientY, screenX: e.screenX, screenY: e.screenY,
+        ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, altKey: e.altKey, metaKey: e.metaKey,
+        button: type === 'mousemove' ? 0 : 2, buttons: (e.buttons & ~4) | (e.buttons & 4 ? 2 : 0) }));
+    }, true);
+  }
+}
+
+// ---------------------------------------------------------------- view switching
+async function showView() {
+  VM = M.views.find(v => v.id === S.view);
+  $('loading').style.display = 'grid';
+  try {
+    [V, T] = await Promise.all([load('view', VM.id), load('table', VM.table)]);
+  } catch (e) {
+    $('loading').textContent = e.message; return;
+  }
+  $('loading').style.display = 'none';
+  // The pinned point by its key: another view may order its points differently, and another
+  // data set may not have it (the pin comes back with a view that does).
+  if (S.pinnedKey != null) { const k = T.keys.indexOf(S.pinnedKey); S.pinned = k < 0 ? null : k; }
+  S.isolate = null;
+  S.camera = null;  // another view's 3-D map has its own extent
+  $('vtitle').textContent = viewLabel(VM);
+  const t = M.tables[VM.table];
+  const media = DOM.media === 'board' ? `${t.n_boards ?? 0}/${t.n} boards` : DOM.media === 'gif' ? `${t.n_gifs}/${t.n} GIFs rendered` : '';
+  $('vsub').textContent = [valueName('sequence_type', VM.sequence_type), experimentOf(VM), `n = ${VM.n}`, `${VM.n_clusters} clusters`, media,
+    VM.reducer_params ? `${DOM.map_name} ${VM.reducer_params.metric ?? ''} k=${VM.reducer_params.n_neighbors ?? ''}` : ''].filter(Boolean).join(' · ');
+  ensureBoards();
+  buildColorSelect();
+  draw(); drawMeasures(); drawRanking(); drawPinned(); drawSelection(null);
+}
+
+// The right panel's width: dragged from its left edge, kept per browser (a convenience, so
+// storage may fail silently). The pinned GIF scales with it live; the map and a board redraw
+// when the drag ends.
+const RW_KEY = 'explorer.rightWidth';
+let fixedRW = null;  // the #rw= width, if the URL gave one
+function setRightWidth(px) {
+  if (px == null) document.documentElement.style.removeProperty('--rw');
+  else document.documentElement.style.setProperty('--rw', `${Math.round(px)}px`);
+}
+function redrawAfterResize() {
+  if ($('plot').data) Plotly.Plots.resize('plot');
+  if (V) drawPinned();
+}
+function rightResizer() {
+  // #...&rw=<px> fixes the width for a reproducible figure capture: it wins over the stored
+  // width, stays in the URL while the view changes, and is never stored
+  const fixed = Number(new URLSearchParams(location.hash.slice(1)).get('rw'));
+  if (fixed > 0) { fixedRW = Math.max(260, Math.round(fixed)); setRightWidth(fixedRW); }
+  else try { const w = Number(localStorage.getItem(RW_KEY)); if (w > 0) setRightWidth(Math.min(w, innerWidth - 600)); } catch (e) {}
+  const grip = $('rgrip');
+  let dragging = false;
+  const done = () => {
+    if (!dragging) return;
+    dragging = false; document.body.classList.remove('resizing'); fixedRW = null;
+    try { localStorage.setItem(RW_KEY, String($('right').getBoundingClientRect().width)); } catch (e) {}
+    redrawAfterResize();
+  };
+  grip.addEventListener('mousedown', e => { if (e.button !== 0) return; dragging = true; document.body.classList.add('resizing'); e.preventDefault(); });
+  window.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    const left = $('left').getBoundingClientRect().width;
+    setRightWidth(Math.max(260, Math.min(innerWidth - e.clientX, innerWidth - left - 300)));  // keep 300 px of map
+  });
+  window.addEventListener('mouseup', done);
+  grip.addEventListener('dblclick', () => {
+    setRightWidth(null); fixedRW = null;
+    try { localStorage.removeItem(RW_KEY); } catch (e) {}
+    redrawAfterResize();
+  });
+}
+
+function init() {
+  if (!M) { document.body.textContent = 'No manifest: build this page with template/build_explorer.py.'; return; }
+  if (typeof Plotly === 'undefined') { document.body.textContent = 'plotly.js did not load (offline? pass --plotly <local path> to the builder).'; return; }
+  $('built').innerHTML = (DOM.subtitle ? `${DOM.subtitle}<br>` : '') + `${M.views.length} views · built ${M.built_at}` +
+    (NOTES.framing ? `<br>${NOTES.framing}` : '') + (DOM.privacy ? `<br><span id="privacy">${DOM.privacy}</span>` : '');
+  document.title = DOM.title;
+  rightResizer();
+  $('apptitle').textContent = DOM.title;
+  $('red').querySelector('[data-r="umap"]').textContent = DOM.map_name;
+  $('seqlabel').textContent = DOM.unit_noun;
+  $('rknote').textContent = `Every view of this ${DOM.unit_noun.toLowerCase()}, best first. Click one to show it.`;
+  $('nameslabel').textContent = `${DOM.label_noun} names`;
+  $('find').placeholder = DOM.find_placeholder;
+  if (DOM.media !== 'gif') {
+    $('gsizelabel').textContent = DOM.media === 'board' ? 'Board size on hover' : '';
+    $('gsize').style.display = DOM.media === 'board' ? '' : 'none';
+    $('hint').textContent = (DOM.media === 'board' ? 'Hover a point to replay its plies. Click it to pin it (◀ ▶ step through the plies). ' : 'Click a point to pin it. ') +
+      'Lasso or box-select (2-D) to fill the gallery. Click a legend entry to isolate that group. Middle-drag pans either map, scroll zooms. 3-D: drag to orbit (right-drag also pans).';
+  }
+  readHash();
+  buildSeq(); buildFacets();
+  if (!S.view || !seqViews().some(v => v.id === S.view)) S.view = filteredViews()[0].id;
+  buildViewSelect(false);
+  fillSelect($('rk-measure'), DOM.measures, S.rkMeasure);
+  S.rkMeasure = $('rk-measure').value;
+
+  $('seq').onchange = () => { S.seq = $('seq').value; S.facets = {}; buildFacets(); S.view = null; buildViewSelect(true); };
+  $('view').onchange = () => { S.view = $('view').value; showView(); };
+  $('color').onchange = () => { S.color = $('color').value; S.isolate = null; draw(); drawMeasures();
+    const c = S.color.split(/:(.*)/s)[1]; if (c && [...$('rk-set').options].some(o => o.value === c)) { S.rkSet = c; $('rk-set').value = c; drawRanking(); } };
+  $('rk-set').onchange = () => { S.rkSet = $('rk-set').value; drawRanking(); };
+  $('rk-measure').onchange = () => { S.rkMeasure = $('rk-measure').value; drawRanking(); writeHash(); };
+  $('find').oninput = () => { S.find = $('find').value.trim(); draw(); };
+  $('psize').oninput = () => { S.psize = Number($('psize').value); draw(); };
+  document.querySelectorAll('#dim button').forEach(b => b.onclick = () => {
+    if (b.disabled) return;
+    S.dim = Number(b.dataset.d);
+    draw();
+  });
+  document.querySelectorAll('#red button').forEach(b => b.onclick = () => {
+    if (b.disabled) return;
+    S.red = b.dataset.r; S.camera = null;
+    draw();
+  });
+  document.querySelectorAll('#show button').forEach(b => b.onclick = () => { if (b.disabled) return; S.show = b.dataset.k; draw(); });
+  document.querySelectorAll('#dref button').forEach(b => b.onclick = () => { S.dref = b.dataset.ref; draw(); });
+  document.querySelectorAll('#cmap button').forEach(b => b.onclick = () => { S.cmap = b.dataset.c; draw(); });
+  $('bw').oninput = () => { S.bw = Number($('bw').value); draw(); };
+  document.querySelectorAll('#gsize button').forEach(b => b.onclick = () => {
+    S.gsize = Number(b.dataset.s);
+    document.querySelectorAll('#gsize button').forEach(x => x.classList.toggle('on', x === b));
+  });
+  document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => tab(b.dataset.t));
+  if (DOM.label_subset) $('lsub').querySelector('[data-ls="1"]').textContent = DOM.label_subset.name;
+  document.querySelectorAll('#lsub button').forEach(b => b.onclick = () => {
+    S.ls = b.dataset.ls === '1';
+    if (!VM) return;
+    buildColorSelect(); draw(); drawMeasures(); drawRanking();
+  });
+  const showNames = () => document.querySelectorAll('#names button').forEach(x => x.classList.toggle('on', Number(x.dataset.n) === Number(S.names)));
+  showNames();
+  document.querySelectorAll('#names button').forEach(b => b.onclick = () => {
+    S.names = b.dataset.n === '1';
+    showNames();
+    if (!VM) return;
+    buildColorSelect(); draw(); drawMeasures(); drawRanking(); drawPinned();
+  });
+
+  Plotly.newPlot('plot', [], layout(), { responsive: true }).then(wirePlot);
+  middlePans(); clickPins();
+  showView();
+}
+init();
+</script>
+</body>
+</html>

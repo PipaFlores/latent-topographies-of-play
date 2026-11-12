@@ -1,0 +1,92 @@
+{
+  "title": "Explorer of latent gameplay",
+  "unit_noun": "Sequence type",
+  "label_noun": "Behavlet",
+  "participant": "user_id",
+  "participant_label": "user",
+  "participants_noun": "participants",
+  "default_type": "pacman_attack",
+  "find_placeholder": "e.g. level_2150_",
+  "media": "gif",
+  "map_name": "UMAP",
+  "clusterer": "HDBSCAN",
+  "facets": [
+    ["feature_set", "Input"],
+    ["embedder", "Model"],
+    ["latent", "Latent size"],
+    ["normalization", "Normalization"],
+    ["speed_correction", "Speed correction"],
+    ["resample_stride", "Resample stride"],
+    ["context", "Context"],
+    ["metric", "UMAP metric"]
+  ],
+  "focus": ["Aggression3_value", "Aggression6_value", "Caution2a_value", "Caution2b_value"],
+  "label_names": {
+    "Aggression1": "Hunt close to ghost house",
+    "Aggression3": "Ghost Kills",
+    "Aggression4": "Hunt even after powerpill finishes",
+    "Aggression6": "Chase Ghosts or Collect Dots",
+    "Caution1": "Times trapped by ghost",
+    "Caution2a": "Average distance to ghosts",
+    "Caution2b": "Average distance during hunt",
+    "Caution3": "Close calls",
+    "Aggression2": "Chase ghosts or eat new fruit",
+    "Caution1b": "Times trapped and killed by ghosts",
+    "Caution4": "Caught after hunt",
+    "Caution5": "Moves with no points scored",
+    "Caution7": "Killed at ghost house",
+    "Decisiveness1": "Vacillating with no ghosts near",
+    "Planning1": "Lure ghosts to power pill",
+    "Planning1a": "Movement while luring",
+    "Planning1b": "Ghosts lured to the pill",
+    "Planning1c": "Ghosts eaten after a lure",
+    "Planning1d": "Caught while luring",
+    "Planning3": "Dots eaten before 1st pill",
+    "Planning4a": "Moves to catch the 1st ghost",
+    "Planning4b": "Moves to catch the 2nd ghost",
+    "Planning5": "Pausing",
+    "Resourcing1": "Average time to eat fruit",
+    "Resourcing2": "Fruit eaten",
+    "Resourcing3": "Save pill for later use",
+    "Thoroughness1": "Sector by sector",
+    "Control_Skill1": "Teleport use near ghosts"
+  },
+  "other_group": "Game / player (validation)",
+  "measure_columns": [
+    ["neigh_hit_adj", "NH map", "Neighbourhood hit (adj.) on the 2-D map"],
+    ["full_neigh_hit_adj", "NH full", "Neighbourhood hit (adj.) in full dimension"],
+    ["knn_r2_adj", "kNN map", "kNN R² (adj.) on the 2-D map"],
+    ["full_knn_r2_adj", "kNN full", "kNN R² (adj.) in full dimension"],
+    ["AMI", "AMI", "HDBSCAN clusters vs bins"]
+  ],
+  "full_space_names": {
+    "latent": "the latent",
+    "summary_generic": "the generic summary vector (z-scored)",
+    "summary_engineered": "the engineered summary vector (z-scored)",
+    "default": "the input, padded with its last step"
+  },
+  "notes": {
+    "measures": "NH: share of each point's 5 nearest neighbours in the same Behavlet bin, minus chance. kNN: Behavlet value predicted from those neighbours (R²), minus chance. Map: on the 2-D UMAP map (Euclidean); full: in the space the map was made from (cosine). AMI: HDBSCAN clusters vs Behavlet bins (ARI, NMI and the raw scores are in Ranking).",
+    "undefined": "no instance of this Behavlet",
+    "focus": "★ = focus Behavlets.",
+    "point_labels": "Behavlets with an instance in this sequence",
+    "no_label": "no label for this sequence"
+  },
+  "hidden_colours": ["user_id"],
+  "value_names": {
+    "sequence_type": {
+      "pacman_attack": "Hunts (power pills)",
+      "first_5_seconds": "Openings (first 5 s)"
+    },
+    "embedder": {
+      "raw": "Raw input"
+    },
+    "feature_set": {
+      "Ghost_Distances": "Ghost distances",
+      "Experimental2": "Distances + Score",
+      "Pacman_Ghosts": "Pac-Man + ghost positions",
+      "full_state_no_pellet_map": "Compressed game state",
+      "all_features": "Full game state"
+    }
+  }
+}

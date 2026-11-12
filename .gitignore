@@ -1,0 +1,9 @@
+Thumbs.db
+desktop.ini
+.DS_Store
+*.tmp
+*.tmp.gif
+__pycache__/
+template/build/
+template/example/build/
+template/example/store/

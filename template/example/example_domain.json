@@ -1,0 +1,28 @@
+{
+  "title": "Toy explorer",
+  "subtitle": "Synthetic points from template/example/make_example.py",
+  "unit_noun": "Data set",
+  "label_noun": "Label",
+  "participant": "participant",
+  "participants_noun": "participants",
+  "media": "none",
+  "clusterer": "k-means",
+  "facets": [["method", "Method"], ["noise", "Noise"]],
+  "focus": ["spread_value"],
+  "label_names": {
+    "spread": "Distance from the group centre",
+    "group": "Group"
+  },
+  "measures": [
+    ["neigh_hit_adj", "Neighbourhood hit (adj.), map"],
+    ["full_neigh_hit_adj", "Neighbourhood hit (adj.), full space"]
+  ],
+  "measure_columns": [
+    ["neigh_hit_adj", "NH map", "Neighbourhood hit (adj.) on the 2-D map"],
+    ["full_neigh_hit_adj", "NH full", "Neighbourhood hit (adj.) in the 12-D input"]
+  ],
+  "notes": {
+    "measures": "NH: share of each point's 5 nearest neighbours in the same label bin, minus chance; on the 2-D map and in the 12-D input.",
+    "focus": "★ = the label to look at first."
+  }
+}
