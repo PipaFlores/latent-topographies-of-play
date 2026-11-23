@@ -17,6 +17,7 @@ writer, as in an array job) never sees half a view.
 from __future__ import annotations
 
 import json
+import math
 import os
 import time
 from collections.abc import Mapping, Sequence
@@ -98,6 +99,46 @@ def _code_names(names):
     return out
 
 
+def _texts(text, n: int) -> dict[str, np.ndarray]:
+    """One text per point as `text_bytes` (their UTF-8 bytes, end to end) and `text_offsets`
+    (where each starts, n + 1 of them): a fixed-width text array would pad every text to the
+    longest. A gap (None, NaN) is stored as ""."""
+    if isinstance(text, (str, bytes)):
+        raise TypeError("text: one text per point expected, got a single string")
+    items = text.tolist() if isinstance(text, np.ndarray) else list(text)
+    if len(items) != n:
+        raise ValueError(f"text: {len(items)} items, expected {n} (one per point)")
+    encoded = [b"" if _is_gap(t) else str(t).encode("utf-8") for t in items]
+    offsets = np.zeros(n + 1, dtype=np.int64)
+    np.cumsum([len(e) for e in encoded], out=offsets[1:])
+    return {
+        "text_bytes": np.frombuffer(b"".join(encoded), dtype=np.uint8),
+        "text_offsets": offsets,
+    }
+
+
+def read_texts(npz) -> list[str] | None:
+    """A view's texts, as write_view stored them ("" for none); None for a view without texts."""
+    if "text_bytes" not in npz.files:
+        return None
+    data, offsets = npz["text_bytes"].tobytes(), npz["text_offsets"].tolist()
+    return [data[a:b].decode("utf-8") for a, b in zip(offsets[:-1], offsets[1:])]  # noqa: RUF007 (pairwise needs 3.10)
+
+
+def _cluster_names(names: Mapping) -> dict[str, str]:
+    """{cluster: name} with the clusters written as integers ("3", not "3.0")."""
+    out = {}
+    for cluster, name in names.items():
+        try:
+            number = float(cluster)
+        except (TypeError, ValueError):
+            number = math.nan
+        if not number.is_integer():
+            raise ValueError(f"cluster_names: {cluster!r} is not a cluster number")
+        out[str(int(number))] = "" if _is_gap(name) else str(name)
+    return out
+
+
 def _map(values, n: int, dims: int, name: str) -> np.ndarray:
     array = np.asarray(values, dtype=np.float32)
     if array.shape != (n, dims):
@@ -128,6 +169,8 @@ def write_view(
     facets: Mapping[str, str] | None = None,
     label: str | None = None,
     summary: list[dict] | None = None,
+    text: Sequence | None = None,
+    cluster_names: Mapping | None = None,
     **fields,
 ) -> Path:
     """Write one view and return the path of its npz.
@@ -145,6 +188,8 @@ def write_view(
         values     {name: array} a label's numeric value, coloured as a number
         map3d      (n, 3) optional 3-D map
         pca        (n, 2) or (n, 3) optional PCA map, with pca_explained its variance ratios
+        text       optional text per point (a document), shown with the domain's media "text";
+                   None or "" where a point has none
 
     About the view (json):
         measures       [{"validation_set": name, <measure>: value, ...}], one row per label
@@ -155,6 +200,8 @@ def write_view(
         facets         {facet: value} the fields the page filters views by, as text
         label          the view's name in the page (default: its facet values, joined)
         summary        [{"name", "value", "note"}] rows shown under the view's note
+        cluster_names  {cluster: name} what this view's clusters are called (a topic's top
+                       words, say); the page shows "3 · name" for cluster 3
         **fields       anything else to record (provenance, a model path, ...)
     """
     keys = np.asarray(keys)
@@ -187,6 +234,8 @@ def write_view(
     for prefix, columns in (("meta", meta), ("label", labels), ("value", values)):
         for name, column in (columns or {}).items():
             arrays[f"{prefix}__{name}"] = _column(column, name, n, prefix)
+    if text is not None:
+        arrays.update(_texts(text, n))
 
     description = {
         "view_id": view_id,
@@ -210,6 +259,8 @@ def write_view(
         description["label"] = label
     if summary is not None:
         description["summary"] = summary
+    if cluster_names is not None:
+        description["cluster_names"] = _cluster_names(cluster_names)
     description.setdefault("created_at", time.strftime("%Y-%m-%dT%H:%M:%S"))
 
     folder = Path(folder)

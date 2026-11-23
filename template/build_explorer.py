@@ -7,13 +7,13 @@ by one measure, and shows each point's hover media. Views with a 3-D map can be 
 README.md describes the view format, the domain file and the hover media.
 
 --domain <file.json> sets the page's wording, facets, focus labels, label descriptions, measures
-and hover media (gif | board | none); a domain file may name another that it "extends" and
+and hover media (gif | board | text | none); a domain file may name another that it "extends" and
 override its keys. Without --domain the page uses the template's generic defaults.
 
 Output, all under --out (default: build/ beside this script):
 
     index.html                 the page, with the manifest of every view inlined
-    data/table_<id>.js         per data set: keys, GIF presence, metadata, labels
+    data/table_<id>.js         per data set: keys, GIF presence, metadata, labels, texts
     data/view_<id>.js          per view: cluster labels, 2-D map, 3-D map, PCA
     data/boards_<id>.js        per data set with a boards.jsonl: the positions of each key's plies
 
@@ -41,6 +41,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
+from views import read_texts  # views.py, beside this script
 
 HERE = Path(__file__).resolve().parent
 TEMPLATE = HERE / "explorer_template.html"
@@ -55,8 +56,12 @@ DOMAIN_KEYS = {
     "label_subset", "other_group", "measures", "measure_columns", "full_space_names",
     "map_name", "clusterer", "notes",
 }  # fmt: skip
+# The hover media a domain may name.
+MEDIA = {"gif", "board", "text", "none"}
 # The data files the builder writes (a rebuild deletes only stale ones of these).
 DATA_PREFIXES = ("table_", "view_", "boards_")
+# The manifest's format, for a page or another writer to check (the template's FORMAT_VERSION).
+FORMAT_VERSION = 1
 
 
 def parse_args(argv=None, defaults: dict | None = None) -> argparse.Namespace:
@@ -119,6 +124,13 @@ def load_domain(path: Path, seen: tuple[Path, ...] = ()) -> dict:
     if unknown := sorted(set(domain) - DOMAIN_KEYS - {"extends"}):
         print(
             f"warning: {path.name} sets keys the page does not read: {', '.join(unknown)}"
+        )
+    if "media" in domain and (
+        not isinstance(domain["media"], str) or domain["media"] not in MEDIA
+    ):
+        print(
+            f"warning: {path.name} sets media {domain['media']!r}; the page shows "
+            f"{', '.join(sorted(MEDIA))} (anything else as none)"
         )
     domain = _finite(
         domain
@@ -207,13 +219,18 @@ def _table_columns(npz) -> dict[str, dict[str, np.ndarray]]:
 
 
 def _table_fingerprint(
-    keys: np.ndarray, columns: dict[str, dict[str, np.ndarray]]
+    keys: np.ndarray,
+    columns: dict[str, dict[str, np.ndarray]],
+    text: list[str] | None = None,
 ) -> str:
     digest = hashlib.md5(keys.tobytes())
     for group in sorted(columns):
         for name in sorted(columns[group]):
             digest.update(f"{group}/{name}".encode())
             digest.update(np.ascontiguousarray(columns[group][name]).tobytes())
+    if text is not None:
+        digest.update(b"text")
+        digest.update(json.dumps(text).encode())
     return digest.hexdigest()[:10]
 
 
@@ -335,22 +352,23 @@ def main(
         with np.load(json_path.with_suffix(".npz"), allow_pickle=False) as npz:
             keys = npz["key"]
             columns = _table_columns(npz)
-            table_id = f"{meta['sequence_type']}_{_table_fingerprint(keys, columns)}"
+            text = read_texts(npz)
+            fingerprint = _table_fingerprint(keys, columns, text)
+            table_id = f"{meta['sequence_type']}_{fingerprint}"
             if table_id not in tables:
                 has_gif = np.array(
                     [key in present_gifs for key in keys.tolist()], dtype=np.int8
                 )
-                written += _write_js(
-                    data_dir / f"table_{table_id}.js",
-                    table_id,
-                    {
-                        "keys": json.dumps(keys.tolist()),
-                        "gif": _array(has_gif),
-                        "meta": _object(columns["meta"]),
-                        "label": _object(columns["label"]),
-                        "value": _object(columns["value"]),
-                    },
-                )
+                parts = {
+                    "keys": json.dumps(keys.tolist()),
+                    "gif": _array(has_gif),
+                    "meta": _object(columns["meta"]),
+                    "label": _object(columns["label"]),
+                    "value": _object(columns["value"]),
+                }
+                if text is not None:  # "" (no text) is written null
+                    parts["text"] = json.dumps([t or None for t in text])
+                written += _write_js(data_dir / f"table_{table_id}.js", table_id, parts)
                 tables[table_id] = {
                     "sequence_type": meta["sequence_type"],
                     "n": len(keys),
@@ -360,6 +378,8 @@ def main(
                     "value": list(columns["value"]),
                     "label_names": {},
                 }
+                if text is not None:
+                    tables[table_id]["n_texts"] = sum(bool(t) for t in text)
                 boards_path = json_path.parent / "boards.jsonl"
                 if boards_path.exists():
                     size, n_boards = _write_boards(
@@ -418,6 +438,11 @@ def main(
         )
         if meta.get("summary"):
             manifest_views[-1]["summary"] = meta["summary"]
+        if isinstance(meta.get("cluster_names"), dict):
+            manifest_views[-1]["cluster_names"] = {
+                str(k): "" if v is None else str(v)
+                for k, v in meta["cluster_names"].items()
+            }
 
     if not manifest_views:
         raise SystemExit(
@@ -436,6 +461,7 @@ def main(
 
     manifest = {
         "built_at": time.strftime("%Y-%m-%d %H:%M"),
+        "format_version": FORMAT_VERSION,
         "gif_base": gif_base,
         "views": manifest_views,
         "tables": tables,
@@ -462,6 +488,8 @@ def main(
             media = f", {table['n_boards']}/{table['n']} boards"
         elif (domain or {}).get("media") == "gif":
             media = f", {table['n_gifs']}/{table['n']} GIFs rendered"
+        elif "n_texts" in table:
+            media = f", {table['n_texts']}/{table['n']} with text"
         else:
             media = ""
         print(f"  {sequence_type}: {count} views{media}")

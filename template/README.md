@@ -3,8 +3,9 @@
 One static web page over a store of 2-D maps ("views") of the same points: embeddings of one
 data set by different models, inputs or seeds. The page switches between views, colours the
 points by cluster, label or metadata, shows each view's measures, ranks the views by one
-measure, and shows each point's hover media (a GIF, a chess board, or nothing). It needs no
-server: it opens from `file://` or any static host.
+measure, and shows each point's hover media (a GIF, a chess board, a text, or nothing). It needs
+no server: it opens from `file://` or any static host. A page in the browser can also hand it data
+it computed itself ([Hand the page its data from JavaScript](#hand-the-page-its-data-from-javascript)).
 
 Building a page needs Python 3.9+ and numpy. Viewing it needs a browser; plotly.js loads from
 a CDN unless you pass a local copy (`--plotly`).
@@ -68,8 +69,9 @@ The folder name is the data set; every view in a folder must describe the same p
 | `meta__<name>` | no | Metadata to colour by (numbers or text; a gap is NaN, or `""` in text, and shows grey). Numbers with 12 or fewer distinct values are coloured as categories. |
 | `label__<name>` | no | A label's bins as numeric codes (integers); NaN or `-1` where it is undefined. Text categories go in as codes, named by the json's `label_names`. |
 | `value__<name>` | no | A label's numeric value (NaN where undefined). The page shows it only beside a `label__<name>` of the same name. |
+| `text_bytes`, `text_offsets` | no | The points' documents for `"media": "text"`: their UTF-8 bytes end to end, and the n + 1 offsets where each starts (`""` where a point has none). Write them with `write_view(text=[...])` and read them with `views.read_texts`. Give every view of a data set the same texts: a view without them forms a table of its own, which shows no text. |
 
-Points with the same metadata and labels form one table, which the views of a data set share.
+Points with the same keys, metadata, labels and texts form one table, which the views of a data set share.
 
 A label named `<name>_value` with both `label__` and `value__` arrays is a numeric label: the
 colour menu offers its value (as a number) and its bins (as classes), and the colour menu and
@@ -86,6 +88,7 @@ under "Other labels".
 | `measures` | no | `[{"validation_set": <label>, <measure>: value, ...}]`, one row per label, by its full name (`speed_value`, not `speed`); `null` (or NaN, which `write_view` stores as `null`) where a measure is undefined. |
 | `full_space` | no | `{"space", "metric", "dims"}`: where the `full_<measure>` columns were computed. |
 | `label_names` | no | `{label: [name of code 0, name of code 1, ...]}`: what each code of a categorical label stands for. (The domain file's `label_names` is something else: a description per label.) |
+| `cluster_names` | no | `{"<cluster>": name}`: what this view's clusters are called (a topic's top words, say). The legend, cards and selection show cluster 3 as "3 · name". Per view, unlike `label_names`, which the views of a table share. |
 | `pca_explained` | no | The PCA map's explained variance ratios. |
 | `summary` | no | `[{"name", "value", "note"}]` rows shown under the view's note. |
 | `reducer_params` | no | `{"metric", "n_neighbors"}`, shown in the view's subtitle. |
@@ -118,7 +121,7 @@ child that sets `notes` replaces all of its parent's notes.
 | `unit_noun` | "Data set" | What the data-set select is called. |
 | `label_noun` | "Label" | What a label is called ("Behavlet", ...). |
 | `default_type` | first | The data set the page opens on. |
-| `media` | "none" | Hover media: `"gif"` (`<gifs>/<key>.gif`), `"board"` (chess, from `boards.jsonl`) or `"none"`. |
+| `media` | "none" | Hover media: `"gif"` (`<gifs>/<key>.gif`), `"board"` (chess, from `boards.jsonl`), `"text"` (the views' `text` array) or `"none"`. |
 | `find_placeholder` | "part of a key" | Hint in the key search box. |
 | `participant` | null | A meta column naming who produced each point: shown on the hover card, counted in the gallery. |
 | `participant_label`, `participants_noun` | the column name, "participants" | How that column reads. |
@@ -134,7 +137,7 @@ child that sets `notes` replaces all of its parent's notes.
 | `measure_columns` | NH and kNN R², map and full; AMI | `[[key, header, tooltip], ...]`: the measures table. A `full_` column shows only when the view has values for it. |
 | `full_space_names` | `{"latent": "the latent", "default": "the input"}` | How the measures note names `full_space.space`. |
 | `map_name`, `clusterer` | "Map", "" | Method names: the map toggle's label ("UMAP"), the clusters' ("HDBSCAN"). |
-| `notes` | | `{"measures", "caption", "undefined", "no_label", "focus", "point_labels", "summary", "framing"}`: texts under the measures table and appended to it, for an undefined value and an unlabelled point (grey), for the ★, on the pinned card, under a view's summary and under the title. The default `measures` text describes neighbourhood hit and kNN R² at k = 5 in the map and a cosine full space: replace it when your measures differ. |
+| `notes` | | `{"measures", "caption", "undefined", "no_label", "focus", "point_labels", "summary", "framing", "no_measures"}`: texts under the measures table and appended to it, for an undefined value and an unlabelled point (grey), for the ★, on the pinned card, under a view's summary, under the title, and for a view without measures. The default `measures` text describes neighbourhood hit and kNN R² at k = 5 in the map and a cosine full space: replace it when your measures differ. |
 
 A complete example: [`example/pacman_domain.json`](example/pacman_domain.json) (GIF hover, Behavlet labels).
 
@@ -150,6 +153,13 @@ The domain's `media` decides what a point shows on hover, when pinned and in the
   `boards`, the piece placement (FEN's first field) after each move; `uci` and `san`, the moves;
   and `focal`, `"white"` or `"black"`, the side shown at the bottom. A key without a line shows
   "no board".
+- `"text"`: the point's document, from the views' `text` array. The hover card shows its first
+  400 characters (the size buttons set the card's width), the pinned card all of it in a
+  scrolling box, and the gallery a list of 150-character snippets. The find box also searches
+  the texts.
+
+When no view has measures, the page hides the Ranking tab and calls the Measures tab "View": it
+then shows each view's note and summary.
 
 ## Publish
 
@@ -164,7 +174,43 @@ The page folder (`--out`) is self-contained except for two things it links to:
 
 Then serve the folder from any static host (GitHub Pages works) or open `index.html` directly.
 
+## Hand the page its data from JavaScript
+
+A page in the browser that computes its own views (embeds texts, runs UMAP, clusters them) can
+show them in this explorer without the builder. Serve a copy of `explorer_template.html` with
+`__PLOTLY_SRC__` replaced by a plotly.js URL and the manifest left out, load it in an iframe, and,
+once it has loaded, call:
+
+```js
+frame.contentWindow.EXPLORER_INIT(manifest, data)  // a promise, settled when the first view is drawn
+```
+
+- `manifest` is what `build_explorer.py` inlines: `{built_at, format_version: 1, gif_base,
+  views: [...], tables: {...}, domain: {...}}`. Build a page with the builder and read its
+  `index.html` for an example of each field. The page needs, per view, `id`, `sequence_type` (its
+  data set), `table`, `n` and `n_clusters`; `label`, `facets`, `measures`, `cluster_names`,
+  `summary` and the rest are optional. `tables[<id>]` lists the table's `meta`, `label` and
+  `value` columns and its `label_names`.
+- `data` holds the data files' contents by id: `{<table id>: table, <view id>: view}`, where
+  ```js
+  table = { keys: ["r00001", ...], text: ["the first document", ...],   // text: for media "text"
+            meta: { col: [...] }, label: { col: [int | null] }, value: { col: [number | null] } }
+  view  = { cluster: [int], x: [...], y: [...],                          // -1: noise
+            x3, y3, z3: [...], p1, p2, p3: [...] }                       // optional: 3-D, PCA
+  ```
+  Every array in a table has one entry per key (`null` where a point has none). A table and a
+  view share the id space, so give them distinct ids. An id left out of `data`
+  loads from `data/` as on a built page.
+- Call it once per page load: the page does not reset its listeners or state, and a second call
+  is refused. Reload the iframe to show other data.
+- A manifest with no views, or a view whose table is not in `tables`, shows a message on the
+  page and rejects the promise; call again with a corrected one. The promise also rejects when
+  the first view's data is neither in `data` nor in `data/`.
+- `built_at` is optional: the page shows it under the title when given.
+
 ## In the page
+
+The find box highlights the points whose key, or text, contains what you type, ignoring case.
 
 The URL hash keeps the view and the display (`view`, `color`, `d=3`, `r=pca`, `m` for the
 ranking measure, `n=1` for label descriptions, `k=density` with `ref=rel` and `bw` for the

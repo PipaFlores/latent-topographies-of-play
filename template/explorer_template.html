@@ -69,7 +69,7 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 12px 0; }
 #card img, .gifbox { display: block; border-radius: 4px; background: #000; }
 .gifbox.none { display: grid; place-items: center; color: #aaa; background: repeating-linear-gradient(
   45deg, #2a2a2a, #2a2a2a 8px, #333 8px, #333 16px); aspect-ratio: 1; font-size: 12px; }
-#card .k { font-family: ui-monospace, monospace; margin-top: 4px; }
+#card .k { font-family: ui-monospace, monospace; margin-top: 4px; overflow-wrap: anywhere; }
 #card .v { color: var(--muted); }
 .tabs { display: flex; border-bottom: 1px solid var(--border); }
 .tabs button { flex: 1; border: 0; background: none; color: var(--muted); padding: 9px 0;
@@ -114,6 +114,23 @@ button.small { border: 1px solid var(--border); background: var(--bg); color: va
 .plies { font: 11px/1.5 ui-monospace, monospace; color: var(--muted); margin-top: 4px; }
 .plies .cur { color: var(--text); font-weight: 700; }
 .plies .foc { color: var(--text); }
+/* Text media: a point's document. The hover card shows its start, the pinned card all of it
+   (scrolling), the gallery a list of snippets. */
+.textbox { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 12px; line-height: 1.45; }
+.textbox.none { color: var(--muted); font-style: italic; }
+#card .textbox { max-height: 40vh; overflow: hidden; }
+.pinmedia .textbox { max-height: 55vh; overflow-y: auto; padding: 6px 8px; border: 1px solid var(--border);
+  border-radius: 5px; background: var(--bg); }
+.textlist { display: flex; flex-direction: column; gap: 4px; }
+.textlist .doc { cursor: pointer; min-width: 0; padding: 4px 6px; border: 1px solid var(--border);
+  border-radius: 5px; font-size: 12px; overflow-wrap: anywhere; }
+.textlist .doc:hover { background: var(--accent-soft); }
+.textlist .kk { font: 10px ui-monospace, monospace; color: var(--muted); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+#findnote:empty { display: none; }
+#legend .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chip { display: inline-flex; max-width: 100%; white-space: nowrap; vertical-align: bottom; }
+.chip .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 #privacy { color: var(--hl); }
 @media (max-width: 1400px) { #app { grid-template-columns: 230px 1fr var(--rw, 300px); } }
 #legend.min .it, #legend.min .more { display: none; }
@@ -158,8 +175,9 @@ button.small { border: 1px solid var(--border); background: var(--bg); color: va
       <label class="f" for="bw">Bandwidth <span class="note" id="bwnote"></span></label><input type="range" id="bw" min="0.1" max="1.5" step="0.05" value="0.5" style="width:100%">
     </div>
 
-    <label class="f" for="find">Highlight keys containing</label>
+    <label class="f" for="find" id="findlabel">Highlight keys containing</label>
     <input type="text" id="find" placeholder="part of a key">
+    <div class="note" id="findnote"></div>
 
     <hr>
     <label class="f" for="psize">Point size</label><input type="range" id="psize" min="1" max="10" value="4" style="width:100%">
@@ -201,7 +219,10 @@ button.small { border: 1px solid var(--border); background: var(--bg); color: va
 <div id="card"></div>
 
 <script>
-const M = /*__MANIFEST__*/null;
+// The manifest: inlined here by build_explorer.py, or handed over at run time by a host page
+// through EXPLORER_INIT (at the end of this script).
+let M = /*__MANIFEST__*/null;
+const FORMAT_VERSION = 1;  // the manifest's format_version this page reads
 
 // ---------------------------------------------------------------- data loading
 const store = {};
@@ -243,37 +264,52 @@ const PALETTE = ['#4e79a7','#f28e2b','#e15759','#76b7b2','#59a14f','#edc948','#b
   '#17becf','#bcbd22','#aec7e8','#ffbb78','#98df8a','#ff9896','#c5b0d5','#c49c94','#f7b6d2',
   '#9edae5','#dbdb8d'];
 // The page's wording, facets, focus labels, measures and hover media: the domain file's
-// (build_explorer.py --domain, README.md) over these defaults.
-const DOM = Object.assign({
-  title: 'Embedding explorer', subtitle: '', unit_noun: 'Data set', label_noun: 'Label',
-  // participant: a meta column naming who produced each point (null: none), shown as
-  // `<participant_label> <id>` on the hover card and counted in the gallery
-  participant: null, participant_label: null, participants_noun: 'participants', default_type: null,
-  find_placeholder: 'part of a key', media: 'none',
-  // the method names the page shows: the stored map's (its toggle button) and the clusters'
-  map_name: 'Map', clusterer: '',
-  // facets: [[key, title]] the view filters, in order; null: every facet key the views carry
-  facets: null, focus: [], first: null,
-  label_names: null, measures: MEASURES, other_group: 'Other labels',
-  // What a view's full_space.space names in the measures note ("default": any other space)
-  full_space_names: { latent: 'the latent', default: 'the input' },
-  // [key, header, tooltip]; a full_ column shows only when the view has its values.
-  measure_columns: [['neigh_hit_adj', 'NH map', 'Neighbourhood hit (adj.) on the 2-D map'],
-    ['full_neigh_hit_adj', 'NH full', 'Neighbourhood hit (adj.) in full dimension'],
-    ['knn_r2_adj', 'kNN map', 'kNN R² (adj.) on the 2-D map'], ['full_knn_r2_adj', 'kNN full', 'kNN R² (adj.) in full dimension'],
-    ['AMI', 'AMI', 'Clusters vs bins']],
-  notes: {}, privacy: '', hidden_colours: [],  // metadata kept off the colour menu (still in the pin card)
-  // {name, note, sets: {<type>: [cols]}}: a named subset of the labels the left panel can narrow
-  // the colour menu, the ranking sets and the measures rows to (hash ls=1); null hides the toggle
-  label_subset: null,
-  // {<facet>: {<value>: <display name>}}: readable names for facet values, shown in the filters and
-  // in each view's label (a part of the label between " · " that is one of the view's facet
-  // values is swapped for its display name)
-  value_names: {},
-}, M?.domain || {});
-if (!DOM.facets) {
-  const keys = [...new Set((M?.views || []).flatMap(v => Object.keys(v.facets || {})))];
-  DOM.facets = keys.filter(Boolean).map(k => [k, esc(k[0].toUpperCase() + k.slice(1).replace(/_/g, ' '))]);
+// (build_explorer.py --domain, README.md) over these defaults. Set by configure() once the
+// manifest is known, with the notes and whether views show their experiment.
+let DOM = null, NOTES = null, SHOW_EXPERIMENT = false;
+function configure() {
+  DOM = Object.assign({
+    title: 'Embedding explorer', subtitle: '', unit_noun: 'Data set', label_noun: 'Label',
+    // participant: a meta column naming who produced each point (null: none), shown as
+    // `<participant_label> <id>` on the hover card and counted in the gallery
+    participant: null, participant_label: null, participants_noun: 'participants', default_type: null,
+    find_placeholder: 'part of a key', media: 'none',
+    // the method names the page shows: the stored map's (its toggle button) and the clusters'
+    map_name: 'Map', clusterer: '',
+    // facets: [[key, title]] the view filters, in order; null: every facet key the views carry
+    facets: null, focus: [], first: null,
+    label_names: null, measures: MEASURES, other_group: 'Other labels',
+    // What a view's full_space.space names in the measures note ("default": any other space)
+    full_space_names: { latent: 'the latent', default: 'the input' },
+    // [key, header, tooltip]; a full_ column shows only when the view has its values.
+    measure_columns: [['neigh_hit_adj', 'NH map', 'Neighbourhood hit (adj.) on the 2-D map'],
+      ['full_neigh_hit_adj', 'NH full', 'Neighbourhood hit (adj.) in full dimension'],
+      ['knn_r2_adj', 'kNN map', 'kNN R² (adj.) on the 2-D map'], ['full_knn_r2_adj', 'kNN full', 'kNN R² (adj.) in full dimension'],
+      ['AMI', 'AMI', 'Clusters vs bins']],
+    notes: {}, privacy: '', hidden_colours: [],  // metadata kept off the colour menu (still in the pin card)
+    // {name, note, sets: {<type>: [cols]}}: a named subset of the labels the left panel can narrow
+    // the colour menu, the ranking sets and the measures rows to (hash ls=1); null hides the toggle
+    label_subset: null,
+    // {<facet>: {<value>: <display name>}}: readable names for facet values, shown in the filters and
+    // in each view's label (a part of the label between " · " that is one of the view's facet
+    // values is swapped for its display name)
+    value_names: {},
+  }, M?.domain || {});
+  if (!DOM.facets) {
+    const keys = [...new Set((M?.views || []).flatMap(v => Object.keys(v.facets || {})))];
+    DOM.facets = keys.filter(Boolean).map(k => [k, esc(k[0].toUpperCase() + k.slice(1).replace(/_/g, ' '))]);
+  }
+  // A view's experiment, shown beside its label only where the page filters by experiment.
+  SHOW_EXPERIMENT = DOM.facets.some(([k]) => k === 'experiment');
+  NOTES = Object.assign({
+    measures: "NH: share of each point's 5 nearest neighbours in the same label bin, minus chance. kNN: label value predicted from those neighbours (R²), minus chance. Map: on the 2-D map (Euclidean); full: in the space the map was made from (cosine). AMI: clusters vs label bins (ARI, NMI and the raw scores are in Ranking).",
+    undefined: 'no value for this label',
+    no_label: 'no label for this point',
+    no_measures: 'No measures for this view.',
+    focus: '★ = focus label.',
+    point_labels: `${DOM.label_noun}s defined for this point`,
+  }, DOM.notes || {});
+  S.rkMeasure = DOM.measures[0]?.[0] ?? null;
 }
 const valueName = (key, v) => DOM.value_names?.[key]?.[v] ?? v;
 const viewLabel = v => {
@@ -286,18 +322,10 @@ const viewLabel = v => {
     return key ? valueName(key, part) : part;
   }).join(' · ');
 };
-// A view's experiment, shown beside its label only where the page filters by experiment.
-const SHOW_EXPERIMENT = DOM.facets.some(([k]) => k === 'experiment');
-// (not when the label already holds it, as a label of joined facet values does)
+// A view's experiment where the page shows it (not when the label already holds it, as a label
+// of joined facet values does).
 const experimentOf = v => !SHOW_EXPERIMENT || !v.facets.experiment || v.label.split(' · ').includes(v.facets.experiment)
   ? '' : valueName('experiment', v.facets.experiment);
-const NOTES = Object.assign({
-  measures: "NH: share of each point's 5 nearest neighbours in the same label bin, minus chance. kNN: label value predicted from those neighbours (R²), minus chance. Map: on the 2-D map (Euclidean); full: in the space the map was made from (cosine). AMI: clusters vs label bins (ARI, NMI and the raw scores are in Ranking).",
-  undefined: 'no value for this label',
-  no_label: 'no label for this point',
-  focus: '★ = focus label.',
-  point_labels: `${DOM.label_noun}s defined for this point`,
-}, DOM.notes || {});
 const focusOf = seq => Array.isArray(DOM.focus) ? DOM.focus : (DOM.focus[seq] || []);
 const firstOf = seq => !DOM.first ? focusOf(seq) : Array.isArray(DOM.first) ? DOM.first : (DOM.first[seq] || focusOf(seq));
 // The label subset's columns for a type (null: no subset there, the toggle hides), and whether a
@@ -317,7 +345,7 @@ const fmt = v => v == null || Number.isNaN(v) ? '–' : typeof v === 'string' ? 
 // ---------------------------------------------------------------- state
 const S = { seq: null, view: null, color: 'cluster', red: 'umap', dim: 2, psize: 4, gsize: 240, names: false, camera: null,
   show: 'points', dref: 'abs', bw: 0.5, cmap: 'viridis', msort: { key: null, desc: true }, ls: false,
-  facets: {}, find: '', isolate: null, rkSet: null, rkMeasure: DOM.measures[0][0], pinned: null, pinnedKey: null, pinPly: 0 };
+  facets: {}, find: '', isolate: null, rkSet: null, rkMeasure: null, pinned: null, pinnedKey: null, pinPly: 0 };
 // The sequential scale for numbers and densities. Plotly has Viridis built in but not plasma,
 // so plasma is matplotlib's, sampled at 11 stops.
 const PLASMA = ['#0d0887', '#41049d', '#6a00a8', '#8f0da4', '#b12a90', '#cc4778', '#e16462', '#f2844b', '#fca636', '#fcce25', '#f0f921']
@@ -343,7 +371,7 @@ function readHash() {
   if (h.get('cm') === 'plasma') S.cmap = 'plasma';
 }
 function writeHash() {
-  const h = new URLSearchParams({ view: S.view, color: S.color, r: S.red, d: S.dim, m: S.rkMeasure, n: S.names ? 1 : 0 });
+  const h = new URLSearchParams({ view: S.view, color: S.color, r: S.red, d: S.dim, ...(S.rkMeasure ? { m: S.rkMeasure } : {}), n: S.names ? 1 : 0 });
   if (S.show === 'density') { h.set('k', 'density'); h.set('ref', S.dref); h.set('bw', S.bw); }
   if (S.msort.key) h.set('s', `${S.msort.key}.${S.msort.desc ? 'desc' : 'asc'}`);
   if (S.ls && subsetOf(S.seq)) h.set('ls', 1);
@@ -449,7 +477,7 @@ function colourInfo() {
     kind = uniq.size <= 12 || raw.some(v => typeof v === 'string') ? 'cat' : 'num';
     for (let i = 0; i < n; i++) if (raw[i] == null) missing[i] = 1;
   }
-  const info = { kind, missing, name, raw, mode, catName: c => mode === 'label' ? labelName(col, c) : String(c) };
+  const info = { kind, missing, name, raw, mode, catName: c => mode === 'label' ? labelName(col, c) : mode === 'cluster' ? clusterName(c) : String(c) };
   if (kind === 'cat') {
     const cats = [...new Set(raw.filter((_, i) => !missing[i]))]
       .sort((a, b) => typeof a === 'number' && typeof b === 'number' ? a - b : String(a).localeCompare(String(b)));
@@ -499,14 +527,28 @@ function traces() {
   return [...out, ...overlays(n, size, three, mk)];
 }
 
+// The points whose key (or text, where the table has texts) holds the find box's words, ignoring
+// case. The lower-cased keys and texts are kept per table.
+let findIndex = null;
+function findHits() {
+  if (findIndex?.T !== T) {
+    // one entry per key, whatever the text array holds
+    const low = a => Array.from(T.keys, (_, i) => a?.[i] == null ? '' : String(a[i]).toLowerCase());
+    findIndex = { T, keys: low(T.keys), text: Array.isArray(T.text) ? low(T.text) : null };
+  }
+  const q = S.find.toLowerCase(), { keys, text } = findIndex, hit = [];
+  for (let i = 0; i < keys.length; i++) if (keys[i].includes(q) || (text && text[i].includes(q))) hit.push(i);
+  return hit;
+}
+
 // The highlight ring and the pinned marker, drawn over either view.
 function overlays(n, size, three, mk) {
   const out = [];
   if (S.find) {
-    const hit = [];
-    for (let i = 0; i < n; i++) if (T.keys[i].includes(S.find)) hit.push(i);
+    const hit = findHits();
+    $('findnote').textContent = `${hit.length} of ${n} match`;
     out.push(mk(hit, { color: 'rgba(0,0,0,0)', size: size + 6, line: { color: css('--hl'), width: 2 } }, 'highlight'));
-  }
+  } else $('findnote').textContent = '';
   if (S.pinned != null) out.push(mk([S.pinned], { color: css('--hl'), size: size + 8, symbol: three ? 'diamond' : 'star', line: { color: '#fff', width: 1 } }, 'pinned'));
   return out;
 }
@@ -604,7 +646,9 @@ function drawLegend() {
   const rows = order.slice(0, 80).map(i => {
     const c = info.cats[i];
     const off = S.isolate != null && S.isolate !== c;
-    return `<div class="it${off ? ' off' : ''}" data-i="${i}"><span class="sw" style="background:${PALETTE[i % PALETTE.length]}"></span>${info.mode === 'cluster' ? 'cluster ' : ''}${esc(info.catName(c))}<span class="n">${info.counts[i]}</span></div>`;
+    // A named cluster reads "3 · its name"; a long name is cut, and shown whole on hover.
+    const name = (info.mode === 'cluster' && !hasClusterName(c) ? 'cluster ' : '') + info.catName(c);
+    return `<div class="it${off ? ' off' : ''}" data-i="${i}" title="${esc(name)}"><span class="sw" style="background:${PALETTE[i % PALETTE.length]}"></span><span class="nm">${esc(name)}</span><span class="n">${info.counts[i]}</span></div>`;
   });
   if (order.length > 80) rows.push(`<div class="note more">+${order.length - 80} more</div>`);
   box.classList.toggle('min', legendMin);
@@ -674,12 +718,12 @@ function measureOf(view, set, m) {
 // A view's own summary lines (another domain's views may carry them): name, value, note.
 function summaryHtml() {
   if (!Array.isArray(VM.summary) || !VM.summary.length) return '';
-  return '<dl>' + VM.summary.map(r => `<dt>${esc(r.name)}</dt><dd>${typeof r.value === 'number' || r.value == null ? fmt(r.value) : esc(r.value)}` +
+  return '<dl>' + VM.summary.map(r => `<dt>${esc(r.name)}</dt><dd>${Number.isInteger(r.value) ? r.value : typeof r.value === 'number' || r.value == null ? fmt(r.value) : esc(r.value)}` +
     `${r.note ? ` <span class="note">${esc(r.note)}</span>` : ''}</dd>`).join('') + '</dl>' + (NOTES.summary ? `<div class="note">${NOTES.summary}</div>` : '');
 }
 
 function drawMeasures() {
-  const focus = focusOf(S.seq), lead = DOM.measure_columns[0][0];
+  const focus = focusOf(S.seq), lead = DOM.measure_columns[0]?.[0];
   const cols = DOM.measure_columns.filter(([k]) => !k.startsWith('full_') || VM.measures.some(r => r[k] != null));
   const fs = VM.full_space;
   const full = fs && cols.some(([k]) => k.startsWith('full_'))
@@ -701,9 +745,15 @@ function drawMeasures() {
   });
   const cur = S.color.split(/:(.*)/s)[1];
   const arrow = k => k === sortKey ? (S.msort.desc ? ' ▼' : ' ▲') : '';
+  const head = `<div class="note">${esc(viewLabel(VM))}${experimentOf(VM) ? ` · ${esc(experimentOf(VM))}` : ''} · n = ${esc(VM.n)} · ${esc(VM.n_clusters)} clusters` +
+    `${VM.model ? `<br>checkpoint <code>${esc(VM.model)}</code>` : ''}`;
+  // A view without measures (or a page without measure columns) shows its note and summary only.
+  if (!VM.measures.length || !cols.length) {
+    $('p-measures').innerHTML = `${head}</div>${summaryHtml()}<div class="note">${NOTES.no_measures}</div>`;
+    return;
+  }
   $('p-measures').innerHTML =
-    `<div class="note">${esc(viewLabel(VM))}${experimentOf(VM) ? ` · ${esc(experimentOf(VM))}` : ''} · n = ${esc(VM.n)} · ${esc(VM.n_clusters)} clusters` +
-    `${VM.model ? `<br>checkpoint <code>${esc(VM.model)}</code>` : ''}${full}${subset}<br>Click a row to colour by it, a column name to sort by it. ${NOTES.focus}</div>` + summaryHtml() +
+    `${head}${full}${subset}<br>Click a row to colour by it, a column name to sort by it.${focus.length ? ' ' + NOTES.focus : ''}</div>` + summaryHtml() +
     `<table><tr><th class="sort${sortKey ? '' : ' sorted'}" data-k="" title="Focus sets first">Set</th>` +
     `${cols.map(([k, t, tip]) => `<th class="num sort${k === sortKey ? ' sorted' : ''}" data-k="${k}" title="${tip || t} · click to sort">${t}${arrow(k)}</th>`).join('')}</tr>` +
     rows.map(r => `<tr class="click${r.validation_set === cur ? ' cur' : ''}" data-s="${esc(r.validation_set)}"><td title="${esc(r.validation_set.replace(/_value$/, ''))}">${esc(pretty(r.validation_set))}${focus.includes(r.validation_set) ? ' ★' : ''}</td>` +
@@ -725,6 +775,7 @@ function drawMeasures() {
 
 function drawRanking() {
   const set = S.rkSet, m = S.rkMeasure;
+  if (!m || !set) { $('rk-table').innerHTML = '<div class="note">No measures to rank the views by.</div>'; return; }
   const rows = seqViews().map(v => [v, measureOf(v, set, m)]).sort((a, b) => (b[1] ?? -Infinity) - (a[1] ?? -Infinity));
   const max = Math.max(1e-9, ...rows.map(r => r[1] ?? 0));
   const mTitle = (DOM.measures.find(([k]) => k === m) || [m, m])[1];
@@ -786,7 +837,10 @@ function boardHtml(i, width, ply) {
   if (!BD.boards[i]) return `<div class="gifbox none" style="width:${width}px">no board</div>`;
   return boardGrid(i, ply, width);
 }
-const hasMedia = i => DOM.media === 'gif' ? !!T.gif[i] : DOM.media === 'board' ? BD?.table === VM.table && !!BD.boards[i] : false;
+const hasMedia = i => DOM.media === 'gif' ? !!T.gif[i] : DOM.media === 'board' ? BD?.table === VM.table && !!BD.boards[i]
+  : DOM.media === 'text' ? !!T.text?.[i] : false;
+// What the gallery's count calls a point's media ("12 with a GIF").
+const MEDIA_NOUN = { gif: 'a GIF', board: 'a board', text: 'text' };
 // The hover card's board plays the unit's plies as the GIF plays a sequence.
 let cardTimer = null;
 function playCard(i) {
@@ -802,9 +856,27 @@ function playCard(i) {
   }, 700);
 }
 
-function gifHtml(i, width) {
+// ---------------------------------------------------------------- text (domain media 'text')
+// A point's document (the table's text array). The hover card and the gallery show its start,
+// cut at a word; the pinned card all of it.
+const TEXT_CHARS = { card: 400, gallery: 150 };
+const textOf = i => { const t = T.text?.[i]; return t == null ? '' : String(t); };
+function shorten(text, n) {
+  if (text.length <= n) return text;
+  const cut = text.slice(0, n), space = cut.search(/\s\S*$/);
+  return (space > n * 0.6 ? cut.slice(0, space) : cut) + ' …';
+}
+function textHtml(i, width, whole) {
+  const text = textOf(i), style = width ? ` style="width:${width}px"` : '';
+  if (!text) return `<div class="textbox none"${style}>no text</div>`;
+  return `<div class="textbox"${style}>${esc(whole ? text : shorten(text, TEXT_CHARS.card))}</div>`;
+}
+
+// A point's hover media at a width: its board, GIF or text (`whole`: the pinned card's full text).
+function gifHtml(i, width, whole = false) {
   if (DOM.media === 'board') return boardHtml(i, width, BD?.boards[i] ? nPlies(i) : 0);
-  if (DOM.media === 'none') return '';
+  if (DOM.media === 'text') return textHtml(i, whole ? null : width, whole);
+  if (DOM.media !== 'gif') return '';
   const key = T.keys[i];
   if (!T.gif[i]) return `<div class="gifbox none" style="width:${width}px">not rendered</div>`;
   return `<img src="${esc(M.gif_base)}${encodeURIComponent(key)}.gif" width="${width}" alt="${esc(key)}" onerror="this.outerHTML='<div class=&quot;gifbox none&quot; style=&quot;width:${width}px&quot;>missing</div>'">`;
@@ -823,6 +895,10 @@ function labelName(col, code) {
   const name = (M.tables[VM.table].label_names || {})[col]?.[code];
   return name == null ? String(code) : String(name).replaceAll('>', ' → ');
 }
+// A cluster as the page shows it: "noise", its number, or its number with the view's name for
+// it (the view's cluster_names, such as a topic's top words).
+const hasClusterName = c => VM?.cluster_names?.[c] != null && VM.cluster_names[c] !== '';
+const clusterName = c => c === -1 ? 'noise' : hasClusterName(c) ? `${c} · ${VM.cluster_names[c]}` : String(c);
 
 function drawPinned() {
   const i = S.pinned, box = $('p-pinned');
@@ -845,10 +921,10 @@ function drawPinned() {
     ? `${boardGrid(i, S.pinPly, width)}<div class="row" style="margin-top:6px"><button class="small" id="ply0">⏮</button>` +
       `<button class="small" id="plyprev">◀</button><button class="small" id="plynext">▶</button><button class="small" id="plyend">⏭</button></div>` +
       pliesHtml(i, S.pinPly, width)
-    : gifHtml(i, width);
+    : gifHtml(i, width, true);
   box.innerHTML = `<div class="row" style="justify-content:space-between"><code>${esc(T.keys[i])}</code><button class="small" id="unpin" style="flex:none">Unpin</button></div>` +
     `<div class="pinmedia" style="margin:8px 0">${media}</div>` +
-    `<dl><dt>cluster</dt><dd>${V.cluster[i] === -1 ? 'noise' : V.cluster[i]}</dd>${meta}</dl>` +
+    `<dl><dt>cluster</dt><dd>${esc(clusterName(V.cluster[i]))}</dd>${meta}</dl>` +
     `<div class="note">${NOTES.point_labels}</div><dl>${sets || '<dd>none</dd>'}</dl>`;
   $('unpin').onclick = () => { S.pinned = S.pinnedKey = null; drawPinned(); draw(); };
   if (boards) {
@@ -867,8 +943,10 @@ function drawSelection(idx) {
   if (!idx || !idx.length) { box.innerHTML = '<div class="note">Lasso or box-select points on the 2-D map.</div>'; return; }
   const counts = new Map();
   idx.forEach(i => { const c = V.cluster[i]; counts.set(c, (counts.get(c) || 0) + 1); });
-  const top = [...counts].sort((a, b) => b[1] - a[1]).slice(0, 8)
-    .map(([c, k]) => `<span class="chip">${c === -1 ? 'noise' : 'c' + c}: ${k}</span>`).join('');
+  const top = [...counts].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([c, k]) => {
+    const name = c === -1 ? 'noise' : hasClusterName(c) ? `c${clusterName(c)}` : 'c' + c;
+    return `<span class="chip" title="${esc(name)}: ${k}"><span class="nm">${esc(name)}</span>: ${k}</span>`;
+  }).join('');
   const info = pointColorInfo;
   let summary = '';
   if (info && info.kind === 'num') {
@@ -878,13 +956,18 @@ function drawSelection(idx) {
     summary = `<div class="note">${esc(info.name)}: mean ${fmt(mean(vals))} here (n=${vals.length}) vs ${fmt(mean(all))} overall</div>`;
   }
   const users = new Set(idx.map(i => T.meta[DOM.participant] ? T.meta[DOM.participant][i] : null));
-  // Without hover media the gallery lists the first keys.
-  const withGif = DOM.media === 'none' ? idx : idx.filter(hasMedia);
+  // Without hover media the gallery lists the first keys; with text, a snippet of each.
+  const noun = MEDIA_NOUN[DOM.media];
+  const withGif = noun ? idx.filter(hasMedia) : idx;
   const shown = withGif.slice(0, 60);
+  const snippet = i => esc(shorten(textOf(i).replace(/\s+/g, ' ').trim(), TEXT_CHARS.gallery));
+  const gallery = DOM.media === 'text'
+    ? `<div class="textlist">${shown.map(i => `<div class="doc" data-i="${i}"><div class="kk">${esc(T.keys[i])}</div>${snippet(i)}</div>`).join('')}</div>`
+    : `<div class="gallery">${shown.map(i => `<figure data-i="${i}">${gifHtml(i, 100)}<figcaption>${esc(T.keys[i])}</figcaption></figure>`).join('')}</div>`;
   box.innerHTML = `<div class="row" style="justify-content:space-between"><b>${idx.length} selected</b><button class="small" id="clearsel" style="flex:none">Clear</button></div>` +
-    `<div class="note">${[T.meta[DOM.participant] ? `${users.size} ${DOM.participants_noun}` : '', DOM.media === 'none' ? '' : `${withGif.length} with a ${DOM.media === 'board' ? 'board' : 'GIF'}`].filter(Boolean).join(' · ')}${withGif.length > shown.length ? `${DOM.media === 'none' ? '' : ','} first ${shown.length} shown` : ''}</div>${summary}<div>${top}</div>` +
-    `<div class="gallery">${shown.map(i => `<figure data-i="${i}">${gifHtml(i, 100)}<figcaption>${esc(T.keys[i])}</figcaption></figure>`).join('')}</div>`;
-  box.querySelectorAll('figure').forEach(f => f.onclick = () => pin(Number(f.dataset.i)));
+    `<div class="note">${[T.meta[DOM.participant] ? `${users.size} ${DOM.participants_noun}` : '', noun ? `${withGif.length} with ${noun}` : ''].filter(Boolean).join(' · ')}${withGif.length > shown.length ? `${noun ? ',' : ''} first ${shown.length} shown` : ''}</div>${summary}<div>${top}</div>` +
+    gallery;
+  box.querySelectorAll('[data-i]').forEach(f => f.onclick = () => pin(Number(f.dataset.i)));
   $('clearsel').onclick = () => { drawSelection(null); draw(); };
 }
 
@@ -912,8 +995,10 @@ function showCard(i) {
   const p = DOM.participant, user = T.meta[p] ? ` · ${esc(DOM.participant_label || p)} ${esc(T.meta[p][i])}` : '';
   const board = DOM.media === 'board' && BD?.boards[i];
   const media = board ? boardGrid(i, 0, S.gsize) + pliesHtml(i, 0, S.gsize) : gifHtml(i, S.gsize);
+  // A text card is as wide as its text; its key and cluster wrap under it.
+  if (DOM.media === 'text') c.style.maxWidth = `${S.gsize + 14}px`;
   c.innerHTML = `<div id="cardmedia">${media}</div>` + `<div class="k">${esc(T.keys[i])}</div>` +
-    `<div class="v">cluster ${V.cluster[i] === -1 ? 'noise' : V.cluster[i]}${user}` +
+    `<div class="v">cluster ${esc(clusterName(V.cluster[i]))}${user}` +
     `${S.color !== 'cluster' ? ` · ${esc(pointColorInfo.name)}: ${esc(pointValue(i))}` : ''}</div>`;
   c.style.display = 'block';
   placeCard();
@@ -983,14 +1068,19 @@ function middlePans() {
 }
 
 // ---------------------------------------------------------------- view switching
+let shownOnce = false;  // whether a view has loaded yet
 async function showView() {
   VM = M.views.find(v => v.id === S.view);
-  $('loading').style.display = 'grid';
+  $('loading').textContent = 'Loading…'; $('loading').style.display = 'grid';
   try {
     [V, T] = await Promise.all([load('view', VM.id), load('table', VM.table)]);
   } catch (e) {
-    $('loading').textContent = e.message; return;
+    $('loading').textContent = e.message;
+    if (!shownOnce) throw e;  // EXPLORER_INIT's promise rejects when nothing could be drawn
+    return;
   }
+  shownOnce = true;
+  for (const k of ['meta', 'label', 'value']) T[k] = T[k] || {};  // a table handed over without one
   $('loading').style.display = 'none';
   // The pinned point by its key: another view may order its points differently, and another
   // data set may not have it (the pin comes back with a view that does).
@@ -999,7 +1089,9 @@ async function showView() {
   S.camera = null;  // another view's 3-D map has its own extent
   $('vtitle').textContent = viewLabel(VM);
   const t = M.tables[VM.table];
-  const media = DOM.media === 'board' ? `${t.n_boards ?? 0}/${t.n} boards` : DOM.media === 'gif' ? `${t.n_gifs}/${t.n} GIFs rendered` : '';
+  const nTexts = DOM.media === 'text' ? (T.text || []).filter(s => s != null && s !== '').length : 0;
+  const media = DOM.media === 'board' ? `${t.n_boards ?? 0}/${t.n} boards` : DOM.media === 'gif' ? `${t.n_gifs}/${t.n} GIFs rendered`
+    : DOM.media === 'text' && nTexts < T.keys.length ? `${nTexts}/${T.keys.length} with text` : '';
   $('vsub').textContent = [valueName('sequence_type', VM.sequence_type), experimentOf(VM), `n = ${VM.n}`, `${VM.n_clusters} clusters`, media,
     VM.reducer_params ? `${DOM.map_name} ${VM.reducer_params.metric ?? ''} k=${VM.reducer_params.n_neighbors ?? ''}` : ''].filter(Boolean).join(' · ');
   ensureBoards();
@@ -1048,10 +1140,32 @@ function rightResizer() {
   });
 }
 
+// A message over the empty map, for a page that cannot show anything yet.
+function notice(text) { $('loading').textContent = text; $('loading').style.display = 'grid'; }
+
+// What the page needs of a manifest it was handed (a built one has it all): an error message, or
+// null after filling in the optional view fields.
+function checkManifest() {
+  if (!M || typeof M !== 'object' || !Array.isArray(M.views) || !M.views.length) return 'The manifest has no views.';
+  M.tables = M.tables || {};
+  for (const t of Object.values(M.tables)) {
+    for (const k of ['meta', 'label', 'value']) t[k] = t[k] || [];
+    t.label_names = t.label_names || {};
+  }
+  for (const v of M.views) {
+    if (v.id == null || v.sequence_type == null) return 'Every view needs an id and a sequence_type.';
+    if (!M.tables[v.table]) return `View ${v.id}: its table ${v.table} is not in the manifest's tables.`;
+    v.id = String(v.id); v.sequence_type = String(v.sequence_type);
+    v.facets = v.facets || {}; v.measures = v.measures || [];
+    v.label = v.label == null ? v.id : String(v.label);
+  }
+  if (M.format_version > FORMAT_VERSION) console.warn(`explorer: manifest format_version ${M.format_version} is newer than this page's (${FORMAT_VERSION})`);
+  return null;
+}
+
 function init() {
-  if (!M) { document.body.textContent = 'No manifest: build this page with template/build_explorer.py.'; return; }
-  if (typeof Plotly === 'undefined') { document.body.textContent = 'plotly.js did not load (offline? pass --plotly <local path> to the builder).'; return; }
-  $('built').innerHTML = (DOM.subtitle ? `${DOM.subtitle}<br>` : '') + `${M.views.length} views · built ${M.built_at}` +
+  if (typeof Plotly === 'undefined') { document.body.textContent = 'plotly.js did not load (offline? pass --plotly <local path> to the builder).'; return Promise.reject(new Error('plotly.js did not load')); }
+  $('built').innerHTML = (DOM.subtitle ? `${DOM.subtitle}<br>` : '') + `${M.views.length} views${M.built_at ? ` · built ${esc(M.built_at)}` : ''}` +
     (NOTES.framing ? `<br>${NOTES.framing}` : '') + (DOM.privacy ? `<br><span id="privacy">${DOM.privacy}</span>` : '');
   document.title = DOM.title;
   rightResizer();
@@ -1061,11 +1175,26 @@ function init() {
   $('rknote').textContent = `Every view of this ${DOM.unit_noun.toLowerCase()}, best first. Click one to show it.`;
   $('nameslabel').textContent = `${DOM.label_noun} names`;
   $('find').placeholder = DOM.find_placeholder;
-  if (DOM.media !== 'gif') {
+  if (DOM.media === 'text') {
+    // Text needs a wider card: S, M, L are 280, 400 and 560 px.
+    $('gsizelabel').textContent = 'Card width';
+    const widths = [280, 400, 560];
+    document.querySelectorAll('#gsize button').forEach((b, k) => { b.dataset.s = widths[k]; });
+    S.gsize = widths[1];
+    $('findlabel').textContent = 'Highlight texts containing';
+    $('hint').textContent = 'Hover a point to read the start of its text. Click it to pin it: Pinned shows the whole text. ' +
+      'Lasso or box-select (2-D) to list the texts. Click a legend entry to isolate that group. Middle-drag pans either map, scroll zooms. 3-D: drag to orbit (right-drag also pans).';
+  } else if (DOM.media !== 'gif') {
     $('gsizelabel').textContent = DOM.media === 'board' ? 'Board size on hover' : '';
     $('gsize').style.display = DOM.media === 'board' ? '' : 'none';
     $('hint').textContent = (DOM.media === 'board' ? 'Hover a point to replay its plies. Click it to pin it (◀ ▶ step through the plies). ' : 'Click a point to pin it. ') +
       'Lasso or box-select (2-D) to fill the gallery. Click a legend entry to isolate that group. Middle-drag pans either map, scroll zooms. 3-D: drag to orbit (right-drag also pans).';
+  }
+  // Without measures in any view, the Ranking tab has nothing to rank and Measures holds only
+  // each view's note and summary, so it is called View.
+  if (!M.views.some(v => v.measures.length) || !DOM.measures.length) {
+    $('tabs').querySelector('[data-t="ranking"]').style.display = 'none';
+    if (!M.views.some(v => v.measures.length)) $('tabs').querySelector('[data-t="measures"]').textContent = 'View';
   }
   readHash();
   buildSeq(); buildFacets();
@@ -1080,7 +1209,9 @@ function init() {
     const c = S.color.split(/:(.*)/s)[1]; if (c && [...$('rk-set').options].some(o => o.value === c)) { S.rkSet = c; $('rk-set').value = c; drawRanking(); } };
   $('rk-set').onchange = () => { S.rkSet = $('rk-set').value; drawRanking(); };
   $('rk-measure').onchange = () => { S.rkMeasure = $('rk-measure').value; drawRanking(); writeHash(); };
-  $('find').oninput = () => { S.find = $('find').value.trim(); draw(); };
+  // Redrawn once typing pauses: each redraw passes over every point.
+  let findTimer = null;
+  $('find').oninput = () => { clearTimeout(findTimer); findTimer = setTimeout(() => { S.find = $('find').value.trim(); draw(); }, 200); };
   $('psize').oninput = () => { S.psize = Number($('psize').value); draw(); };
   document.querySelectorAll('#dim button').forEach(b => b.onclick = () => {
     if (b.disabled) return;
@@ -1118,9 +1249,34 @@ function init() {
 
   Plotly.newPlot('plot', [], layout(), { responsive: true }).then(wirePlot);
   middlePans(); clickPins();
-  showView();
+  return showView();
 }
-init();
+
+// ---------------------------------------------------------------- start
+// A built page starts from its inlined manifest. A host page that computes its data in the
+// browser leaves the manifest out and calls, once the page has loaded,
+//   frame.contentWindow.EXPLORER_INIT(manifest, data)
+// with the manifest build_explorer.py would inline and `data` its data files' contents by id
+// ({<table id>: table, <view id>: view}; any id left out loads from data/ as usual). It returns
+// a promise that settles when the first view is drawn. Once per page load: listeners and state
+// are not reset, so reload the page (the iframe) to show other data.
+let booted = false;
+function boot() {
+  if (booted) return Promise.reject(new Error('The explorer already shows data: reload the page to show other data.'));
+  const problem = checkManifest();
+  if (problem) { notice(problem); return Promise.reject(new Error(problem)); }  // the host may try again
+  booted = true;
+  configure();
+  return init();
+}
+window.EXPLORER_INIT = (manifest, data) => {
+  if (booted) return boot();
+  M = manifest;
+  Object.assign(store, data || {});
+  try { return boot(); } catch (e) { return Promise.reject(e); }
+};
+if (M) boot().catch(e => console.error(e));
+else notice('No data: build this page with template/build_explorer.py, or hand it data with EXPLORER_INIT (README.md).');
 </script>
 </body>
 </html>
